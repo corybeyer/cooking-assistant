@@ -1,0 +1,40 @@
+from pydantic_settings import BaseSettings
+from functools import lru_cache
+
+
+class Settings(BaseSettings):
+    """Application settings loaded from environment variables."""
+
+    # Database
+    db_server: str = "localhost"
+    db_name: str = "cookingdb"
+    db_user: str = ""
+    db_password: str = ""
+
+    # Claude API
+    anthropic_api_key: str = ""
+    claude_model: str = "claude-sonnet-4-20250514"
+
+    # Azure Speech (for later)
+    azure_speech_key: str = ""
+    azure_speech_region: str = "centralus"
+
+    @property
+    def database_url(self) -> str:
+        """Build the SQL Server connection string."""
+        return (
+            f"mssql+pyodbc://{self.db_user}:{self.db_password}"
+            f"@{self.db_server}/{self.db_name}"
+            f"?driver=ODBC+Driver+18+for+SQL+Server"
+            f"&Encrypt=yes&TrustServerCertificate=no"
+        )
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    """Cached settings instance."""
+    return Settings()
