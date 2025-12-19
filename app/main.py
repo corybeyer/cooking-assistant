@@ -1,5 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
 
 from app.routers import recipes_router, cooking_router
 
@@ -41,3 +44,18 @@ def health_check():
         "database": "not_checked",  # TODO: add DB ping
         "claude": "not_checked"     # TODO: add Claude API check
     }
+
+
+# Serve static files
+static_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
+if os.path.exists(static_path):
+    app.mount("/static", StaticFiles(directory=static_path), name="static")
+
+
+@app.get("/app")
+def serve_app():
+    """Serve the voice-enabled cooking assistant UI."""
+    index_path = os.path.join(static_path, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"error": "UI not available"}
