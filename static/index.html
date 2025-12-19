@@ -209,6 +209,34 @@
         let recognition = null;
         let isListening = false;
         let synthesis = window.speechSynthesis;
+        let preferredVoice = null;
+
+        // Find British female voice
+        function loadVoices() {
+            const voices = synthesis.getVoices();
+            // Look for British female voice
+            preferredVoice = voices.find(v =>
+                (v.lang.includes('en-GB') || v.name.includes('UK') || v.name.includes('British')) &&
+                (v.name.includes('Female') || v.name.includes('Hazel') || v.name.includes('Kate') ||
+                 v.name.includes('Serena') || v.name.includes('Martha') || v.name.includes('Libby'))
+            );
+            // Fallback: any British voice
+            if (!preferredVoice) {
+                preferredVoice = voices.find(v => v.lang.includes('en-GB'));
+            }
+            // Fallback: any English female
+            if (!preferredVoice) {
+                preferredVoice = voices.find(v =>
+                    v.lang.includes('en') &&
+                    (v.name.includes('Female') || v.name.includes('Samantha') || v.name.includes('Victoria'))
+                );
+            }
+            console.log('Selected voice:', preferredVoice?.name || 'default');
+        }
+
+        // Load voices (async in some browsers)
+        synthesis.onvoiceschanged = loadVoices;
+        loadVoices();
 
         // Load recipes on page load
         async function loadRecipes() {
@@ -297,6 +325,9 @@
         function speak(text) {
             synthesis.cancel();
             const utterance = new SpeechSynthesisUtterance(text);
+            if (preferredVoice) {
+                utterance.voice = preferredVoice;
+            }
             utterance.rate = 1.0;
             utterance.pitch = 1.0;
             synthesis.speak(utterance);
