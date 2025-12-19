@@ -107,53 +107,45 @@ cooking-assistant/
 
 ### How the Layers Interact
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                         CLIENT                               │
-│              (Browser, Mobile App, curl)                     │
-└─────────────────────────┬───────────────────────────────────┘
-                          │ HTTP Request
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│                     CONTROLLERS                              │
-│   recipes.py: /recipes endpoints                             │
-│   cooking.py: /cooking/sessions endpoints                    │
-│                                                              │
-│   Responsibilities:                                          │
-│   - Parse and validate requests (using Schemas)              │
-│   - Call Services for business logic                         │
-│   - Return formatted responses (using Schemas)               │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│                       SERVICES                               │
-│   claude.py: CookingAssistant class                          │
-│                                                              │
-│   Responsibilities:                                          │
-│   - Implement business logic                                 │
-│   - Manage Claude API conversations                          │
-│   - Handle streaming responses                               │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│                        MODELS                                │
-│   entities.py: Recipe, Ingredient, Step (ORM)                │
-│   schemas.py: RecipeCreate, CookingMessage (Pydantic)        │
-│                                                              │
-│   Responsibilities:                                          │
-│   - Define data structures                                   │
-│   - Validate incoming data                                   │
-│   - Map to/from database                                     │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│                       DATABASE                               │
-│   Azure SQL Server                                           │
-│   Tables: Recipes, Ingredients, Steps, etc.                  │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph CLIENT["CLIENT (Browser, Mobile App, curl)"]
+    end
+
+    subgraph CONTROLLERS["CONTROLLERS"]
+        C1["recipes.py: /recipes endpoints"]
+        C2["cooking.py: /cooking/sessions endpoints"]
+        C3["Responsibilities:
+        - Parse and validate requests (using Schemas)
+        - Call Services for business logic
+        - Return formatted responses (using Schemas)"]
+    end
+
+    subgraph SERVICES["SERVICES"]
+        S1["claude.py: CookingAssistant class"]
+        S2["Responsibilities:
+        - Implement business logic
+        - Manage Claude API conversations
+        - Handle streaming responses"]
+    end
+
+    subgraph MODELS["MODELS"]
+        M1["entities.py: Recipe, Ingredient, Step (ORM)"]
+        M2["schemas.py: RecipeCreate, CookingMessage (Pydantic)"]
+        M3["Responsibilities:
+        - Define data structures
+        - Validate incoming data
+        - Map to/from database"]
+    end
+
+    subgraph DATABASE["DATABASE (Azure SQL Server)"]
+        DB1["Tables: Recipes, Ingredients, Steps, etc."]
+    end
+
+    CLIENT -->|HTTP Request| CONTROLLERS
+    CONTROLLERS --> SERVICES
+    SERVICES --> MODELS
+    MODELS --> DATABASE
 ```
 
 ## API Endpoints
@@ -247,27 +239,48 @@ del active_sessions[session_id]
 
 ## Database Schema
 
-```
-┌─────────────────┐       ┌─────────────────────┐       ┌─────────────────┐
-│     Recipes     │       │  RecipeIngredients  │       │   Ingredients   │
-├─────────────────┤       ├─────────────────────┤       ├─────────────────┤
-│ RecipeId (PK)   │──┐    │ RecipeIngredientId  │    ┌──│ IngredientId    │
-│ Name            │  │    │ RecipeId (FK)       │────┘  │ Name            │
-│ Description     │  └───>│ IngredientId (FK)   │───────│                 │
-│ Cuisine         │       │ UnitId (FK)         │───┐   └─────────────────┘
-│ PrepTime        │       │ Quantity            │   │
-│ CookTime        │       │ OrderIndex          │   │   ┌─────────────────┐
-│ Servings        │       └─────────────────────┘   │   │ UnitsOfMeasure  │
-└─────────────────┘                                 │   ├─────────────────┤
-        │                                           └──>│ UnitId          │
-        │         ┌─────────────────┐                   │ UnitName        │
-        │         │      Steps      │                   └─────────────────┘
-        │         ├─────────────────┤
-        └────────>│ StepId          │
-                  │ RecipeId (FK)   │
-                  │ Description     │
-                  │ OrderIndex      │
-                  └─────────────────┘
+```mermaid
+erDiagram
+    Recipes {
+        int RecipeId PK
+        string Name
+        string Description
+        string Cuisine
+        int PrepTime
+        int CookTime
+        int Servings
+    }
+
+    Ingredients {
+        int IngredientId PK
+        string Name
+    }
+
+    UnitsOfMeasure {
+        int UnitId PK
+        string UnitName
+    }
+
+    RecipeIngredients {
+        int RecipeIngredientId PK
+        int RecipeId FK
+        int IngredientId FK
+        int UnitId FK
+        string Quantity
+        int OrderIndex
+    }
+
+    Steps {
+        int StepId PK
+        int RecipeId FK
+        string Description
+        int OrderIndex
+    }
+
+    Recipes ||--o{ RecipeIngredients : "has"
+    Recipes ||--o{ Steps : "has"
+    Ingredients ||--o{ RecipeIngredients : "used in"
+    UnitsOfMeasure ||--o{ RecipeIngredients : "measures"
 ```
 
 **Why this schema?**
