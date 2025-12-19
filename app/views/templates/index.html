@@ -303,6 +303,7 @@
         let sessionId = null;
         let recognition = null;
         let isListening = false;
+        let hadRecognitionError = false;
         let synthesis = window.speechSynthesis;
         let preferredVoice = null;
         let currentStreamingMessage = null;
@@ -597,32 +598,66 @@
          */
         function startListening() {
             synthesis.cancel(); // Stop any speech
+            hadRecognitionError = false; // Reset error flag
 
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
             recognition.continuous = false;
-            recognition.interimResults = false;
+            recognition.interimResults = true; // Show interim results for better feedback
             recognition.lang = 'en-US';
 
             recognition.onstart = () => {
                 isListening = true;
                 document.getElementById('voiceBtn').classList.add('listening');
                 setStatus('Listening...');
+                console.log('Speech recognition started');
             };
 
             recognition.onresult = (event) => {
-                const text = event.results[0][0].transcript;
-                sendMessage(text);
+                const result = event.results[0];
+                const text = result[0].transcript;
+
+                if (result.isFinal) {
+                    // Final result - send the message
+                    console.log('Speech recognized (final):', text);
+                    sendMessage(text);
+                } else {
+                    // Interim result - show what's being heard
+                    setStatus(`Hearing: "${text}"`);
+                }
             };
 
             recognition.onerror = (event) => {
                 console.error('Speech error:', event.error);
-                stopListening();
-                setStatus('Error - try again');
+                hadRecognitionError = true;
+
+                // Provide specific error messages
+                let errorMessage = 'Error - try again';
+                switch (event.error) {
+                    case 'no-speech':
+                        errorMessage = 'No speech detected - try speaking louder';
+                        break;
+                    case 'audio-capture':
+                        errorMessage = 'No microphone found';
+                        break;
+                    case 'not-allowed':
+                        errorMessage = 'Microphone permission denied - check browser settings';
+                        break;
+                    case 'network':
+                        errorMessage = 'Network error - check connection';
+                        break;
+                    case 'aborted':
+                        errorMessage = 'Listening cancelled';
+                        break;
+                }
+                setStatus(errorMessage);
             };
 
             recognition.onend = () => {
-                stopListening();
+                // Don't overwrite error status if there was an error
+                const preserveStatus = hadRecognitionError;
+                hadRecognitionError = false;
+                stopListening(preserveStatus);
             };
 
             recognition.start();
@@ -630,11 +665,14 @@
 
         /**
          * Stop listening for voice input.
+         * @param {boolean} preserveStatus - If true, don't reset the status message
          */
-        function stopListening() {
+        function stopListening(preserveStatus = false) {
             isListening = false;
             document.getElementById('voiceBtn').classList.remove('listening');
-            setStatus('Tap microphone to speak');
+            if (!preserveStatus) {
+                setStatus('Tap microphone to speak');
+            }
             if (recognition) {
                 recognition.stop();
             }
