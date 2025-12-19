@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cooking Assistant</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        .recipe-select {
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            margin-bottom: 15px;
+        }
+        .btn {
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+            font-weight: 600;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        .btn:active {
+            transform: scale(0.98);
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .chat-container {
+            display: none;
+        }
+        .chat-container.active {
+            display: block;
+        }
+        .messages {
+            height: 300px;
+            overflow-y: auto;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: #f9f9f9;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            max-width: 85%;
+        }
+        .message.user {
+            background: #667eea;
+            color: white;
+            margin-left: auto;
+        }
+        .message.assistant {
+            background: white;
+            border: 1px solid #e0e0e0;
+        }
+        .voice-btn {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            font-size: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 20px auto;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.2s;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+        .voice-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+        }
+        .voice-btn.listening {
+            background: #e74c3c;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        .status {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        .recipe-info {
+            background: #f0f4ff;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+        }
+        .recipe-info h3 {
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+        .text-input-row {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .text-input {
+            flex: 1;
+            padding: 12px;
+            font-size: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+        }
+        .btn-send {
+            padding: 12px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🍳 Cooking Assistant</h1>
+
+        <!-- Recipe Selection -->
+        <div class="card" id="selectCard">
+            <select class="recipe-select" id="recipeSelect">
+                <option value="">Loading recipes...</option>
+            </select>
+            <button class="btn btn-primary" id="startBtn" onclick="startSession()">
+                Start Cooking
+            </button>
+        </div>
+
+        <!-- Chat Interface -->
+        <div class="card chat-container" id="chatCard">
+            <div class="recipe-info">
+                <h3 id="recipeName">Recipe Name</h3>
+                <span id="recipeDetails"></span>
+            </div>
+
+            <div class="messages" id="messages"></div>
+
+            <button class="voice-btn" id="voiceBtn" onclick="toggleVoice()">
+                🎤
+            </button>
+            <p class="status" id="status">Tap microphone to speak</p>
+
+            <div class="text-input-row">
+                <input type="text" class="text-input" id="textInput"
+                       placeholder="Or type here..." onkeypress="handleKeyPress(event)">
+                <button class="btn-send" onclick="sendTextMessage()">Send</button>
+            </div>
+
+            <button class="btn btn-danger" style="margin-top: 15px;" onclick="endSession()">
+                End Cooking Session
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        let sessionId = null;
+        let recognition = null;
+        let isListening = false;
+        let synthesis = window.speechSynthesis;
+
+        // Load recipes on page load
+        async function loadRecipes() {
+            try {
+                const res = await fetch(`${API_BASE}/recipes`);
+                const recipes = await res.json();
+                const select = document.getElementById('recipeSelect');
+                select.innerHTML = '<option value="">Select a recipe...</option>';
+                recipes.forEach(r => {
+                    select.innerHTML += `<option value="${r.recipe_id}">${r.name}</option>`;
+                });
+            } catch (e) {
+                console.error('Failed to load recipes:', e);
+                document.getElementById('recipeSelect').innerHTML =
+                    '<option value="">Failed to load recipes</option>';
+            }
+        }
+
+        // Start cooking session
+        async function startSession() {
+            const recipeId = document.getElementById('recipeSelect').value;
+            if (!recipeId) {
+                alert('Please select a recipe');
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/cooking/sessions`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ recipe_id: parseInt(recipeId) })
+                });
+                const data = await res.json();
+                sessionId = data.session_id;
+
+                document.getElementById('recipeName').textContent = data.recipe_name;
+                document.getElementById('recipeDetails').textContent =
+                    `${data.total_ingredients} ingredients • ${data.total_steps} steps`;
+
+                document.getElementById('selectCard').style.display = 'none';
+                document.getElementById('chatCard').classList.add('active');
+                document.getElementById('messages').innerHTML = '';
+
+                // Initial greeting
+                await sendMessage("I'm ready to start cooking. What should I do first?");
+            } catch (e) {
+                console.error('Failed to start session:', e);
+                alert('Failed to start session');
+            }
+        }
+
+        // Send message to Claude
+        async function sendMessage(text) {
+            if (!sessionId || !text.trim()) return;
+
+            addMessage(text, 'user');
+            setStatus('Thinking...');
+
+            try {
+                const res = await fetch(`${API_BASE}/cooking/sessions/${sessionId}/message`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text })
+                });
+                const data = await res.json();
+                addMessage(data.text, 'assistant');
+                speak(data.text);
+                setStatus('Tap microphone to speak');
+            } catch (e) {
+                console.error('Failed to send message:', e);
+                setStatus('Error - try again');
+            }
+        }
+
+        // Add message to chat
+        function addMessage(text, role) {
+            const messages = document.getElementById('messages');
+            const div = document.createElement('div');
+            div.className = `message ${role}`;
+            div.textContent = text;
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        // Text-to-speech
+        function speak(text) {
+            synthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 1.0;
+            utterance.pitch = 1.0;
+            synthesis.speak(utterance);
+        }
+
+        // Voice recognition
+        function toggleVoice() {
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                alert('Voice not supported in this browser. Try Chrome.');
+                return;
+            }
+
+            if (isListening) {
+                stopListening();
+            } else {
+                startListening();
+            }
+        }
+
+        function startListening() {
+            synthesis.cancel(); // Stop any speech
+
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+
+            recognition.onstart = () => {
+                isListening = true;
+                document.getElementById('voiceBtn').classList.add('listening');
+                setStatus('Listening...');
+            };
+
+            recognition.onresult = (event) => {
+                const text = event.results[0][0].transcript;
+                sendMessage(text);
+            };
+
+            recognition.onerror = (event) => {
+                console.error('Speech error:', event.error);
+                stopListening();
+                setStatus('Error - try again');
+            };
+
+            recognition.onend = () => {
+                stopListening();
+            };
+
+            recognition.start();
+        }
+
+        function stopListening() {
+            isListening = false;
+            document.getElementById('voiceBtn').classList.remove('listening');
+            setStatus('Tap microphone to speak');
+            if (recognition) {
+                recognition.stop();
+            }
+        }
+
+        // Text input
+        function sendTextMessage() {
+            const input = document.getElementById('textInput');
+            if (input.value.trim()) {
+                sendMessage(input.value.trim());
+                input.value = '';
+            }
+        }
+
+        function handleKeyPress(e) {
+            if (e.key === 'Enter') {
+                sendTextMessage();
+            }
+        }
+
+        // End session
+        async function endSession() {
+            if (sessionId) {
+                try {
+                    await fetch(`${API_BASE}/cooking/sessions/${sessionId}`, {
+                        method: 'DELETE'
+                    });
+                } catch (e) {
+                    console.error('Failed to end session:', e);
+                }
+            }
+            sessionId = null;
+            document.getElementById('selectCard').style.display = 'block';
+            document.getElementById('chatCard').classList.remove('active');
+            synthesis.cancel();
+        }
+
+        function setStatus(text) {
+            document.getElementById('status').textContent = text;
+        }
+
+        // Initialize
+        loadRecipes();
+    </script>
+</body>
+</html>
