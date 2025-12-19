@@ -25,7 +25,7 @@ def list_recipes(
     if category:
         query = query.where(Recipe.Category == category)
 
-    query = query.offset(skip).limit(limit)
+    query = query.order_by(Recipe.RecipeId).offset(skip).limit(limit)
     recipes = db.scalars(query).all()
 
     return [
