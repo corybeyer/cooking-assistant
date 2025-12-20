@@ -28,7 +28,7 @@ from app.models import Recipe, RecipeIngredient
 st.set_page_config(
     page_title="Cooking Assistant",
     page_icon="🍳",
-    layout="centered"
+    layout="wide"
 )
 
 settings = get_settings()
@@ -289,34 +289,28 @@ if not st.session_state.cooking_started:
         st.warning("No recipes found. Add some recipes to the database.")
 
 else:
-    # Cooking Session
-    st.markdown(f"### 📖 {st.session_state.recipe_name}")
+    # Cooking Session - Sidebar for controls
+    with st.sidebar:
+        st.markdown(f"### 📖 {st.session_state.recipe_name}")
+        st.markdown("---")
 
-    # Chat history
-    chat_container = st.container(height=400)
-    with chat_container:
-        for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]):
-                st.write(msg["content"])
-
-    # Input methods
-    st.markdown("---")
-    col1, col2 = st.columns([1, 1])
-
-    with col1:
+        # Voice Input
         st.markdown("**🎤 Voice Input**")
-        # Use dynamic key to reset widget after processing
-        audio = st.audio_input("Tap to record", key=f"audio_input_{st.session_state.audio_key}")
+        audio = st.audio_input(
+            "Tap to record",
+            key=f"audio_input_{st.session_state.audio_key}"
+        )
 
         if audio:
             with st.spinner("Transcribing..."):
                 text = transcribe_audio(audio.read())
                 if text:
                     st.session_state.pending_message = text
-                    # Increment key to reset the audio widget on next rerun
                     st.session_state.audio_key += 1
 
-    with col2:
+        st.markdown("---")
+
+        # Text Input
         st.markdown("**⌨️ Text Input**")
         text_input = st.text_input(
             "Type your message:",
@@ -324,6 +318,21 @@ else:
             placeholder="What's next?",
             label_visibility="collapsed"
         )
+
+        st.markdown("---")
+
+        # End session button
+        if st.button("🛑 End Cooking Session", type="secondary", use_container_width=True):
+            end_cooking()
+            st.rerun()
+
+    # Main area - Chat history (full width, taller)
+    st.markdown("### 💬 Chat")
+    chat_container = st.container(height=600)
+    with chat_container:
+        for msg in st.session_state.messages:
+            with st.chat_message(msg["role"]):
+                st.write(msg["content"])
 
     # Process message (from voice or text)
     message_to_send = None
@@ -353,10 +362,4 @@ else:
         if audio_html:
             st.markdown(audio_html, unsafe_allow_html=True)
 
-        st.rerun()
-
-    # End session button
-    st.markdown("---")
-    if st.button("🛑 End Cooking Session", type="secondary"):
-        end_cooking()
         st.rerun()
