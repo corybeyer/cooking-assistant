@@ -15,6 +15,7 @@ import speech_recognition as sr
 from gtts import gTTS
 import tempfile
 import base64
+import os
 from io import BytesIO
 
 from app.config import get_settings
@@ -102,6 +103,7 @@ def get_recipe_context(recipe_id: int) -> tuple[str, str]:
 
 def transcribe_audio(audio_bytes: bytes) -> str:
     """Transcribe audio using Google Speech Recognition (free, no API key needed)."""
+    temp_path = None
     try:
         # Save audio to temp file
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
@@ -122,6 +124,10 @@ def transcribe_audio(audio_bytes: bytes) -> str:
     except Exception as e:
         st.error(f"Transcription error: {e}")
         return ""
+    finally:
+        # Always clean up temp file to prevent disk space exhaustion
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
 
 
 def text_to_speech(text: str) -> str:
