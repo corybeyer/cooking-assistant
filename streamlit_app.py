@@ -225,6 +225,9 @@ if "cooking_started" not in st.session_state:
 if "audio_key" not in st.session_state:
     st.session_state.audio_key = 0
 
+if "pending_audio" not in st.session_state:
+    st.session_state.pending_audio = None
+
 
 def start_cooking(recipe_id: int):
     """Start a cooking session for the selected recipe."""
@@ -334,6 +337,11 @@ else:
             with st.chat_message(msg["role"]):
                 st.write(msg["content"])
 
+    # Play pending audio (from previous response)
+    if st.session_state.pending_audio:
+        st.markdown(st.session_state.pending_audio, unsafe_allow_html=True)
+        st.session_state.pending_audio = None
+
     # Process message (from voice or text)
     message_to_send = None
 
@@ -357,9 +365,9 @@ else:
 
         st.session_state.messages.append({"role": "assistant", "content": response})
 
-        # Text-to-speech
+        # Generate TTS and store for playback after rerun
         audio_html = text_to_speech(response)
         if audio_html:
-            st.markdown(audio_html, unsafe_allow_html=True)
+            st.session_state.pending_audio = audio_html
 
         st.rerun()
