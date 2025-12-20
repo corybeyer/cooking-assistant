@@ -18,9 +18,11 @@ import base64
 import os
 from io import BytesIO
 
+from sqlalchemy.orm import joinedload
+
 from app.config import get_settings
 from app.database import SessionLocal
-from app.models import Recipe
+from app.models import Recipe, RecipeIngredient
 
 # Page config
 st.set_page_config(
@@ -65,7 +67,11 @@ def get_recipe_context(recipe_id: int) -> tuple[str, str]:
     """Get full recipe details formatted for Claude."""
     db = SessionLocal()
     try:
-        recipe = db.get(Recipe, recipe_id)
+        recipe = db.query(Recipe).options(
+            joinedload(Recipe.ingredients).joinedload(RecipeIngredient.ingredient),
+            joinedload(Recipe.ingredients).joinedload(RecipeIngredient.unit),
+            joinedload(Recipe.steps)
+        ).filter(Recipe.RecipeId == recipe_id).first()
         if not recipe:
             return None, None
 
