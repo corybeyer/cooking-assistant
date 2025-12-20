@@ -16,6 +16,7 @@ from gtts import gTTS
 import tempfile
 import base64
 import os
+import hashlib
 from io import BytesIO
 
 from sqlalchemy.orm import joinedload
@@ -222,6 +223,9 @@ if "recipe_context" not in st.session_state:
 if "cooking_started" not in st.session_state:
     st.session_state.cooking_started = False
 
+if "last_audio_id" not in st.session_state:
+    st.session_state.last_audio_id = None
+
 
 def start_cooking(recipe_id: int):
     """Start a cooking session for the selected recipe."""
@@ -305,11 +309,16 @@ else:
         audio = st.audio_input("Tap to record", key="audio_input")
 
         if audio:
-            with st.spinner("Transcribing..."):
-                text = transcribe_audio(audio.read())
-                if text:
-                    st.session_state.pending_message = text
-                    st.info(f'You said: "{text}"')
+            # Read audio bytes and compute hash to prevent reprocessing same audio
+            audio_bytes = audio.read()
+            audio_hash = hashlib.md5(audio_bytes).hexdigest()
+            if audio_hash != st.session_state.last_audio_id:
+                st.session_state.last_audio_id = audio_hash
+                with st.spinner("Transcribing..."):
+                    text = transcribe_audio(audio_bytes)
+                    if text:
+                        st.session_state.pending_message = text
+                        st.info(f'You said: "{text}"')
 
     with col2:
         st.markdown("**⌨️ Text Input**")
