@@ -4,8 +4,8 @@ name: Trigger auto deployment for ca-cooking-assistant
 on:
   # Automatically trigger it when detected changes in repo
   push:
-    branches: 
-      [ claude/connect-cooking-assistant-SYAxz ]
+    branches:
+      [ main ]
     paths:
     - '**'
     - '.github/workflows/ca-cooking-assistant-AutoDeployTrigger-08ae4d32-87d1-4f61-83da-1854c6c2ba42.yml'
