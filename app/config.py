@@ -2,6 +2,9 @@ from pydantic_settings import BaseSettings
 from functools import lru_cache
 
 
+from urllib.parse import quote_plus
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
@@ -19,11 +22,17 @@ class Settings(BaseSettings):
     azure_speech_key: str = ""
     azure_speech_region: str = "centralus"
 
+    # App authentication
+    app_password: str = ""  # Required for access
+
     @property
     def database_url(self) -> str:
-        """Build the SQL Server connection string."""
+        """Build the SQL Server connection string with properly encoded credentials."""
+        # URL-encode password to handle special characters safely
+        encoded_password = quote_plus(self.db_password)
+        encoded_user = quote_plus(self.db_user)
         return (
-            f"mssql+pyodbc://{self.db_user}:{self.db_password}"
+            f"mssql+pyodbc://{encoded_user}:{encoded_password}"
             f"@{self.db_server}/{self.db_name}"
             f"?driver=ODBC+Driver+18+for+SQL+Server"
             f"&Encrypt=yes&TrustServerCertificate=no"

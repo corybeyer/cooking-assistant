@@ -14,15 +14,21 @@ import anthropic
 import speech_recognition as sr
 from gtts import gTTS
 import tempfile
-import base64
 import os
 from io import BytesIO
 
 from sqlalchemy.orm import joinedload
 
+import logging
+from datetime import datetime, timedelta
+
 from app.config import get_settings
 from app.database import SessionLocal
 from app.models import Recipe, RecipeIngredient
+
+# Configure logging (server-side only, not exposed to users)
+logging.basicConfig(level=logging.ERROR)
+logger = logging.getLogger(__name__)
 
 # Page config
 st.set_page_config(
@@ -32,6 +38,65 @@ st.set_page_config(
 )
 
 settings = get_settings()
+
+
+# ============================================
+# Authentication
+# ============================================
+
+def check_password() -> bool:
+    """Simple password authentication gate."""
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
+
+    if st.session_state.authenticated:
+        return True
+
+    st.title("🍳 Cooking Assistant")
+    st.markdown("### Please sign in to continue")
+
+    password = st.text_input("Password", type="password", key="password_input")
+
+    if st.button("Sign In", type="primary"):
+        if password == settings.app_password:
+            st.session_state.authenticated = True
+            st.rerun()
+        else:
+            st.error("Incorrect password")
+            logger.warning("Failed login attempt")
+
+    return False
+
+
+# ============================================
+# Rate Limiting
+# ============================================
+
+# Rate limit: max requests per time window
+RATE_LIMIT_MAX_REQUESTS = 30
+RATE_LIMIT_WINDOW_SECONDS = 60
+
+
+def check_rate_limit() -> bool:
+    """Check if user has exceeded rate limit. Returns True if allowed."""
+    now = datetime.now()
+
+    if "request_timestamps" not in st.session_state:
+        st.session_state.request_timestamps = []
+
+    # Remove timestamps outside the window
+    window_start = now - timedelta(seconds=RATE_LIMIT_WINDOW_SECONDS)
+    st.session_state.request_timestamps = [
+        ts for ts in st.session_state.request_timestamps if ts > window_start
+    ]
+
+    # Check if under limit
+    if len(st.session_state.request_timestamps) >= RATE_LIMIT_MAX_REQUESTS:
+        return False
+
+    # Record this request
+    st.session_state.request_timestamps.append(now)
+    return True
 
 # Initialize API clients
 anthropic_client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
@@ -125,10 +190,12 @@ def transcribe_audio(audio_bytes: bytes) -> str:
         st.warning("Could not understand audio. Please try again.")
         return ""
     except sr.RequestError as e:
-        st.error(f"Speech recognition service error: {e}")
+        logger.error(f"Speech recognition service error: {e}")
+        st.error("Speech recognition service is unavailable. Please try again later.")
         return ""
     except Exception as e:
-        st.error(f"Transcription error: {e}")
+        logger.error(f"Transcription error: {e}")
+        st.error("An error occurred processing audio. Please try again.")
         return ""
     finally:
         # Always clean up temp file to prevent disk space exhaustion
@@ -136,24 +203,18 @@ def transcribe_audio(audio_bytes: bytes) -> str:
             os.unlink(temp_path)
 
 
-def text_to_speech(text: str) -> str:
-    """Convert text to speech and return audio HTML."""
+def text_to_speech(text: str) -> bytes | None:
+    """Convert text to speech and return audio bytes."""
     try:
         tts = gTTS(text=text, lang='en', tld='co.uk')  # British accent
         audio_buffer = BytesIO()
         tts.write_to_fp(audio_buffer)
         audio_buffer.seek(0)
-
-        audio_base64 = base64.b64encode(audio_buffer.read()).decode()
-        audio_html = f"""
-            <audio autoplay>
-                <source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3">
-            </audio>
-        """
-        return audio_html
+        return audio_buffer.read()
     except Exception as e:
-        st.error(f"TTS error: {e}")
-        return ""
+        logger.error(f"TTS error: {e}")
+        st.error("Text-to-speech is unavailable. Please try again later.")
+        return None
 
 
 # ============================================
@@ -261,6 +322,10 @@ def end_cooking():
 # UI
 # ============================================
 
+# Authentication gate - must pass before accessing app
+if not check_password():
+    st.stop()
+
 st.title("🍳 Cooking Assistant")
 
 if not st.session_state.cooking_started:
@@ -337,9 +402,9 @@ else:
             with st.chat_message(msg["role"]):
                 st.write(msg["content"])
 
-    # Play pending audio (from previous response)
+    # Play pending audio (from previous response) using safe st.audio component
     if st.session_state.pending_audio:
-        st.markdown(st.session_state.pending_audio, unsafe_allow_html=True)
+        st.audio(st.session_state.pending_audio, format="audio/mp3", autoplay=True)
         st.session_state.pending_audio = None
 
     # Process message (from voice or text)
@@ -352,22 +417,26 @@ else:
         message_to_send = text_input
 
     if message_to_send:
-        # Add user message
-        st.session_state.messages.append({"role": "user", "content": message_to_send})
+        # Check rate limit before processing
+        if not check_rate_limit():
+            st.error("Too many requests. Please wait a moment before trying again.")
+        else:
+            # Add user message
+            st.session_state.messages.append({"role": "user", "content": message_to_send})
 
-        # Get Claude response
-        with st.spinner("Thinking..."):
-            response = chat_with_claude(
-                message_to_send,
-                st.session_state.recipe_context,
-                st.session_state.messages[:-1]  # Exclude the message we just added
-            )
+            # Get Claude response
+            with st.spinner("Thinking..."):
+                response = chat_with_claude(
+                    message_to_send,
+                    st.session_state.recipe_context,
+                    st.session_state.messages[:-1]  # Exclude the message we just added
+                )
 
-        st.session_state.messages.append({"role": "assistant", "content": response})
+            st.session_state.messages.append({"role": "assistant", "content": response})
 
-        # Generate TTS and store for playback after rerun
-        audio_html = text_to_speech(response)
-        if audio_html:
-            st.session_state.pending_audio = audio_html
+            # Generate TTS and store for playback after rerun
+            audio_bytes = text_to_speech(response)
+            if audio_bytes:
+                st.session_state.pending_audio = audio_bytes
 
-        st.rerun()
+            st.rerun()
