@@ -22,8 +22,7 @@ class Settings(BaseSettings):
     azure_speech_key: str = ""
     azure_speech_region: str = "centralus"
 
-    # App authentication
-    app_password: str = ""  # Required for access
+    # Note: Authentication handled by Azure Container Apps Easy Auth (Entra ID)
 
     @property
     def database_url(self) -> str:

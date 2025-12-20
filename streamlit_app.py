@@ -43,29 +43,9 @@ settings = get_settings()
 # ============================================
 # Authentication
 # ============================================
-
-def check_password() -> bool:
-    """Simple password authentication gate."""
-    if "authenticated" not in st.session_state:
-        st.session_state.authenticated = False
-
-    if st.session_state.authenticated:
-        return True
-
-    st.title("🍳 Cooking Assistant")
-    st.markdown("### Please sign in to continue")
-
-    password = st.text_input("Password", type="password", key="password_input")
-
-    if st.button("Sign In", type="primary"):
-        if password == settings.app_password:
-            st.session_state.authenticated = True
-            st.rerun()
-        else:
-            st.error("Incorrect password")
-            logger.warning("Failed login attempt")
-
-    return False
+# Authentication is handled by Azure Container Apps Easy Auth (Entra ID)
+# Configure via: az containerapp auth microsoft update
+# See: https://learn.microsoft.com/en-us/azure/container-apps/authentication
 
 
 # ============================================
@@ -321,10 +301,6 @@ def end_cooking():
 # ============================================
 # UI
 # ============================================
-
-# Authentication gate - must pass before accessing app
-if not check_password():
-    st.stop()
 
 st.title("🍳 Cooking Assistant")
 
