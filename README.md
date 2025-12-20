@@ -30,6 +30,7 @@ A conversational AI that knows your recipe and can read steps aloud, answer ques
 | **Voice Output** | gTTS (Google Text-to-Speech) | Free, British accent for friendly guidance |
 | **Hosting** | Azure Container Apps | Scales to zero, Docker-based |
 | **Auth** | Azure Easy Auth (Entra ID) | Managed authentication layer |
+| **IaC** | Azure Bicep | Reproducible, modular infrastructure |
 
 ## Project Structure
 
@@ -43,7 +44,11 @@ cooking-assistant/
 │       ├── __init__.py       # Model exports
 │       └── entities.py       # ORM models (Recipe, Ingredient, Step, etc.)
 ├── infrastructure/
-│   └── schema.sql            # Database DDL + stored procedures
+│   ├── schema.sql            # Database DDL + stored procedures
+│   └── bicep/                # Infrastructure as Code (Azure)
+│       ├── main.bicep        # Main orchestration template
+│       ├── modules/          # Modular resource definitions
+│       └── parameters/       # Environment-specific params
 ├── .github/workflows/
 │   └── deploy.yml            # CI/CD pipeline
 ├── requirements.txt
@@ -162,7 +167,28 @@ docker run -p 80:80 --env-file .env cooking-assistant
 
 ## Azure Deployment
 
-### Build and Push
+### Option 1: Infrastructure as Code (Recommended)
+
+Deploy the complete infrastructure using Azure Bicep:
+
+```bash
+# Create resource group
+az group create --name rg-cooking-assistant-dev --location eastus
+
+# Deploy all resources
+az deployment group create \
+  --resource-group rg-cooking-assistant-dev \
+  --template-file infrastructure/bicep/main.bicep \
+  --parameters infrastructure/bicep/parameters/dev.bicepparam \
+  --parameters sqlAdminPassword='<password>' \
+  --parameters anthropicApiKey='<api-key>'
+```
+
+This creates: Container Registry, SQL Server + Database, Key Vault, Container Apps Environment, Container App with Managed Identity, and Log Analytics.
+
+See [infrastructure/bicep/README.md](infrastructure/bicep/README.md) for full documentation.
+
+### Option 2: Manual Deployment
 
 ```bash
 # Build in Azure Container Registry
@@ -193,6 +219,7 @@ az containerapp update \
 - [x] Docker deployment to Azure
 - [x] GitHub Actions CI/CD
 - [x] Rate limiting and auth
+- [x] Infrastructure as Code (Bicep)
 - [ ] Recipe parsing from URLs
 - [ ] Session persistence (Redis for multi-instance)
 
