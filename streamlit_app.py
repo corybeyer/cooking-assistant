@@ -3,7 +3,7 @@ Cooking Assistant - Streamlit App
 
 A voice-enabled cooking assistant that guides you through recipes
 using Claude AI. Features:
-- Voice input via st.audio_input + Whisper transcription
+- Voice input via st.audio_input + Google Speech Recognition (free, no API key)
 - Text-to-speech responses
 - Ingredient prep phase before cooking
 - Step-by-step cooking guidance
@@ -11,7 +11,7 @@ using Claude AI. Features:
 
 import streamlit as st
 import anthropic
-from openai import OpenAI
+import speech_recognition as sr
 from gtts import gTTS
 import tempfile
 import base64
@@ -32,7 +32,7 @@ settings = get_settings()
 
 # Initialize API clients
 anthropic_client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-openai_client = OpenAI()  # Uses OPENAI_API_KEY env var
+recognizer = sr.Recognizer()
 
 
 # ============================================
@@ -101,19 +101,24 @@ def get_recipe_context(recipe_id: int) -> tuple[str, str]:
 # ============================================
 
 def transcribe_audio(audio_bytes: bytes) -> str:
-    """Transcribe audio using OpenAI Whisper API."""
+    """Transcribe audio using Google Speech Recognition (free, no API key needed)."""
     try:
-        # Create a temporary file for the audio
+        # Save audio to temp file
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
             f.write(audio_bytes)
-            f.flush()
+            temp_path = f.name
 
-            with open(f.name, "rb") as audio_file:
-                transcript = openai_client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_file
-                )
-        return transcript.text
+        # Use speech_recognition to transcribe
+        with sr.AudioFile(temp_path) as source:
+            audio_data = recognizer.record(source)
+            text = recognizer.recognize_google(audio_data)
+            return text
+    except sr.UnknownValueError:
+        st.warning("Could not understand audio. Please try again.")
+        return ""
+    except sr.RequestError as e:
+        st.error(f"Speech recognition service error: {e}")
+        return ""
     except Exception as e:
         st.error(f"Transcription error: {e}")
         return ""
