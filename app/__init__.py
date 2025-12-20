@@ -1,1 +1,1 @@
-# Cooking Assistant API
+# Cooking Assistant - Shared modules for Streamlit app
