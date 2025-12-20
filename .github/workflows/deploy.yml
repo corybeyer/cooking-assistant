@@ -6,9 +6,9 @@ on:
   workflow_dispatch:  # Allow manual trigger
 
 env:
-  AZURE_CONTAINER_REGISTRY: crcookingassistant
+  AZURE_CONTAINER_REGISTRY: acrcookingassistant
   CONTAINER_APP_NAME: ca-cooking-assistant
-  RESOURCE_GROUP: rg-cooking-assistant  # UPDATE THIS
+  RESOURCE_GROUP: rg-cooking-assistant
   IMAGE_NAME: cooking-assistant
 
 jobs:
