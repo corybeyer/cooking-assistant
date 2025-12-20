@@ -6,21 +6,37 @@ This file provides context for Claude Code to understand and work with this proj
 
 **Cooking Assistant** is a voice-controlled cooking application that guides users through recipes using natural conversation powered by Claude AI. Users can ask questions like "what's next?", "can I substitute X?", or "is this done yet?" while cooking.
 
-## Architecture: MVC Pattern
+## Architecture
 
-This project follows the **Model-View-Controller (MVC)** pattern:
+This is a **Streamlit application** with a simple, direct architecture:
 
-- **Models** (`app/models/`): Data structures and validation
-- **Views** (`app/views/`): User interface templates
-- **Controllers** (`app/controllers/`): Request handling and routing
-- **Services** (`app/services/`): Business logic layer
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    streamlit_app.py                         │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  UI Layer (Streamlit)                               │   │
+│  │  - Recipe selection                                 │   │
+│  │  - Voice input (speech_recognition)                 │   │
+│  │  - Chat interface                                   │   │
+│  │  - Text-to-speech output (gTTS)                     │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                          │                                  │
+│           ┌──────────────┼──────────────┐                  │
+│           ▼              ▼              ▼                  │
+│    ┌───────────┐  ┌───────────┐  ┌───────────────┐        │
+│    │ SQLAlchemy│  │ Anthropic │  │ Speech/TTS    │        │
+│    │ (Database)│  │ (Claude)  │  │ (Voice I/O)   │        │
+│    └───────────┘  └───────────┘  └───────────────┘        │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ## Tech Stack
 
-- **Backend**: Python 3.12 / FastAPI
-- **Database**: Azure SQL Server
-- **AI**: Claude API (Anthropic) with streaming support
-- **Voice**: Web Speech API (browser-based)
+- **Frontend/Backend**: Python 3.12 / Streamlit
+- **Database**: Azure SQL Server via SQLAlchemy
+- **AI**: Claude API (Anthropic)
+- **Voice Input**: speech_recognition (Google Speech Recognition - free)
+- **Voice Output**: gTTS (Google Text-to-Speech)
 - **Hosting**: Azure Container Apps
 - **CI/CD**: GitHub Actions
 
@@ -28,37 +44,19 @@ This project follows the **Model-View-Controller (MVC)** pattern:
 
 ```
 cooking-assistant/
+├── streamlit_app.py          # Main application (UI + logic)
 ├── app/
 │   ├── __init__.py
-│   ├── main.py                 # FastAPI entry point
-│   ├── config.py               # Pydantic settings
-│   ├── database.py             # SQLAlchemy connection
-│   │
-│   ├── models/                 # M - Data Layer
-│   │   ├── __init__.py         # Exports all models
-│   │   ├── entities.py         # SQLAlchemy ORM models
-│   │   └── schemas.py          # Pydantic schemas (DTOs)
-│   │
-│   ├── views/                  # V - Presentation Layer
-│   │   ├── __init__.py
-│   │   └── templates/
-│   │       └── index.html      # Voice-enabled web UI
-│   │
-│   ├── controllers/            # C - Logic Layer
-│   │   ├── __init__.py
-│   │   ├── recipes.py          # /recipes CRUD
-│   │   └── cooking.py          # /cooking sessions
-│   │
-│   └── services/               # Business Logic
-│       ├── __init__.py
-│       ├── claude.py           # Claude AI with streaming
-│       └── speech.py           # Azure Speech (placeholder)
+│   ├── config.py             # Pydantic settings
+│   ├── database.py           # SQLAlchemy connection
+│   └── models/
+│       ├── __init__.py       # Exports all models
+│       └── entities.py       # SQLAlchemy ORM models
 │
-├── static/                     # Legacy static files
 ├── infrastructure/
-│   └── schema.sql              # Database DDL
+│   └── schema.sql            # Database DDL
 ├── .github/workflows/
-│   └── deploy.yml              # CI/CD pipeline
+│   └── deploy.yml            # CI/CD pipeline
 ├── requirements.txt
 ├── Dockerfile
 └── .env.example
@@ -79,40 +77,7 @@ Key relationships:
 - `Recipe` → has many `Steps` (ordered by `OrderIndex`)
 - Foreign keys use `ON DELETE CASCADE`
 
-## API Endpoints
-
-### Recipe CRUD (`/recipes`)
-- `GET /recipes` - List recipes (with filtering)
-- `GET /recipes/{id}` - Get recipe with ingredients and steps
-- `POST /recipes` - Create recipe
-- `DELETE /recipes/{id}` - Delete recipe
-
-### Cooking Sessions (`/cooking`)
-- `POST /cooking/sessions` - Start session for a recipe
-- `POST /cooking/sessions/{id}/message` - Send message (standard)
-- `POST /cooking/sessions/{id}/stream` - Send message (streaming via SSE)
-- `GET /cooking/sessions/{id}` - Get session info
-- `DELETE /cooking/sessions/{id}` - End session
-
-### Views
-- `GET /app` - Voice-enabled web UI
-- `GET /docs` - OpenAPI documentation
-
 ## Key Patterns
-
-### Importing Models
-```python
-# Import from the models package
-from app.models import Recipe, RecipeCreate, CookingMessage
-```
-
-### Importing Controllers
-```python
-# In main.py
-from app.controllers import recipes_router, cooking_router
-app.include_router(recipes_router)
-app.include_router(cooking_router)
-```
 
 ### Configuration
 ```python
@@ -122,37 +87,20 @@ settings = get_settings()
 
 Required env vars: `DB_SERVER`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `ANTHROPIC_API_KEY`
 
-### Database Sessions
+### Database Access
 ```python
-from app.database import get_db
+from app.database import SessionLocal
+from app.models import Recipe
 
-@router.get("/recipes")
-def list_recipes(db: Session = Depends(get_db)):
-    ...
+db = SessionLocal()
+recipes = db.query(Recipe).all()
+db.close()
 ```
 
-### Streaming Responses
+### Streamlit Session State
 ```python
-# In services/claude.py
-async def chat_stream(self, user_message: str) -> AsyncGenerator[str, None]:
-    with self.client.messages.stream(...) as stream:
-        for text in stream.text_stream:
-            yield text
-
-# In controllers/cooking.py
-@router.post("/sessions/{session_id}/stream")
-async def stream_message(session_id: str, message: CookingMessage):
-    async def generate():
-        async for token in assistant.chat_stream(message.text):
-            yield f"data: {json.dumps({'token': token})}\n\n"
-    return StreamingResponse(generate(), media_type="text/event-stream")
-```
-
-### Cooking Sessions
-Sessions are stored in memory (ephemeral):
-```python
-# In controllers/cooking.py
-active_sessions: dict[str, CookingAssistant] = {}
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 ```
 
 ## Development Commands
@@ -162,48 +110,36 @@ active_sessions: dict[str, CookingAssistant] = {}
 pip install -r requirements.txt
 
 # Run locally
-uvicorn app.main:app --reload
-
-# Open voice UI
-open http://localhost:8000/app
+streamlit run streamlit_app.py
 
 # Run with Docker
 docker build -t cooking-assistant .
 docker run -p 80:80 --env-file .env cooking-assistant
 ```
 
+## Application Flow
+
+1. **Recipe Selection**: User picks a recipe from the database
+2. **Prep Phase**: Claude guides through gathering ingredients
+3. **Cooking Phase**: Step-by-step guidance with voice I/O
+4. **Conversation**: User can ask questions anytime ("what's next?", "can I substitute?")
+
 ## Code Conventions
 
-- **MVC Organization**: Put code in the appropriate layer
-  - Data structures → `models/`
-  - Request handlers → `controllers/`
-  - Business logic → `services/`
-  - HTML templates → `views/templates/`
-
-- **Naming**:
-  - SQLAlchemy models use PascalCase columns (matching SQL Server)
-  - Pydantic schemas use snake_case
-  - Controllers export `router` variable
-
 - **Type hints**: All functions should have type hints
-
-- **Error handling**: Use `HTTPException` from FastAPI
+- **Streamlit caching**: Use `@st.cache_data` for database queries
+- **Session state**: Store conversation history in `st.session_state`
 
 ## Current Status
 
 - [x] Database schema designed
-- [x] MVC architecture implemented
-- [x] Recipe CRUD endpoints
-- [x] Claude integration with streaming
-- [x] Voice-enabled web UI
+- [x] Streamlit app with voice I/O
+- [x] Claude integration for cooking guidance
 - [x] Docker deployment to Azure
-- [ ] Azure Speech Services (enhanced TTS)
-- [ ] Recipe parsing from URLs
-- [ ] GitHub Actions CI/CD secrets
+- [x] GitHub Actions CI/CD
 
 ## Future Work
 
-1. **Azure Speech**: Replace Web Speech API with Azure for better voice quality
-2. **Recipe parsing**: Endpoint to parse recipe URLs into structured JSON
-3. **Session persistence**: Redis for multi-instance deployments
-4. **Mobile app**: React Native app using the same API
+1. **Recipe parsing**: Add recipes from URLs
+2. **Session persistence**: Redis for multi-instance deployments
+3. **Mobile app**: React Native app using a REST API (would require adding FastAPI back)

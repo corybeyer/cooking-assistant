@@ -18,14 +18,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy application code (shared modules: config, database, models)
 COPY app/ ./app/
 
 # Copy Streamlit app
 COPY streamlit_app.py .
-
-# Copy static files for voice UI
-COPY static/ ./static/
 
 # Expose port
 EXPOSE 80
