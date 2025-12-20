@@ -13,6 +13,11 @@ pydantic-settings==2.1.0
 # Claude API
 anthropic>=0.40.0
 
+# Streamlit app
+streamlit>=1.40.0
+SpeechRecognition>=3.10.0  # Google Speech Recognition (free, no API key)
+gTTS>=2.5.0                # Text-to-speech
+
 # Azure Speech (add later)
 # azure-cognitiveservices-speech==1.35.0
 
