@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from app.database import SessionLocal
 from app.models import ShoppingList, ShoppingListItem
 from app.models.repositories import ShoppingListRepository
+from services.notification_service import NotificationService, SMSResult
 
 
 @dataclass
@@ -187,3 +188,57 @@ class ShoppingController:
             return repo.update_status(list_id, "completed")
         finally:
             db.close()
+
+    # ==========================================
+    # SMS Operations
+    # ==========================================
+
+    def is_sms_configured(self) -> bool:
+        """Check if SMS is properly configured."""
+        notification = NotificationService()
+        return notification.is_configured()
+
+    def send_list_via_sms(
+        self,
+        list_id: int,
+        phone_number: str,
+        base_url: str = ""
+    ) -> SMSResult:
+        """
+        Send shopping list to a phone number via SMS.
+
+        Args:
+            list_id: Shopping list ID
+            phone_number: Recipient's phone number
+            base_url: Base URL for the app (for building share link)
+
+        Returns:
+            SMSResult with success status
+        """
+        # Get or create link code
+        link_code = self.generate_link(list_id)
+
+        # Build full URL
+        share_url = f"{base_url}/Shopping_List?code={link_code}" if base_url else self.get_shareable_url(link_code)
+
+        # Get list details
+        shopping_list = self.get_list(list_id)
+        if not shopping_list:
+            return SMSResult(success=False, error="Shopping list not found")
+
+        list_name = shopping_list.Name or "Shopping List"
+        item_count = len(shopping_list.items) if shopping_list.items else 0
+
+        # Send SMS
+        notification = NotificationService()
+        return notification.send_shopping_list_sms(
+            phone_number=phone_number,
+            list_name=list_name,
+            item_count=item_count,
+            share_url=share_url
+        )
+
+    def validate_phone(self, phone: str) -> tuple[bool, str]:
+        """Validate a phone number. Returns (is_valid, message)."""
+        notification = NotificationService()
+        return notification.validate_phone_number(phone)
