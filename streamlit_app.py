@@ -56,6 +56,17 @@ settings = get_settings()
 RATE_LIMIT_MAX_REQUESTS = 30
 RATE_LIMIT_WINDOW_SECONDS = 60
 
+# Voice accent options (gTTS tld parameter)
+VOICE_ACCENTS = {
+    "American 🇺🇸": "com",
+    "British 🇬🇧": "co.uk",
+    "Australian 🇦🇺": "com.au",
+    "Indian 🇮🇳": "co.in",
+    "Canadian 🇨🇦": "ca",
+    "Irish 🇮🇪": "ie",
+    "South African 🇿🇦": "co.za",
+}
+
 
 def check_rate_limit() -> bool:
     """Check if user has exceeded rate limit. Returns True if allowed."""
@@ -183,10 +194,10 @@ def transcribe_audio(audio_bytes: bytes) -> str:
             os.unlink(temp_path)
 
 
-def text_to_speech(text: str) -> bytes | None:
+def text_to_speech(text: str, tld: str = "com") -> bytes | None:
     """Convert text to speech and return audio bytes."""
     try:
-        tts = gTTS(text=text, lang='en', tld='co.uk')  # British accent
+        tts = gTTS(text=text, lang='en', tld=tld)
         audio_buffer = BytesIO()
         tts.write_to_fp(audio_buffer)
         audio_buffer.seek(0)
@@ -269,6 +280,9 @@ if "audio_key" not in st.session_state:
 if "pending_audio" not in st.session_state:
     st.session_state.pending_audio = None
 
+if "voice_accent" not in st.session_state:
+    st.session_state.voice_accent = "American 🇺🇸"
+
 
 def start_cooking(recipe_id: int):
     """Start a cooking session for the selected recipe."""
@@ -338,23 +352,18 @@ else:
         st.markdown(f"### 📖 {st.session_state.recipe_name}")
         st.markdown("---")
 
-        # Voice Input
-        st.markdown("**🎤 Voice Input**")
-        audio = st.audio_input(
-            "Tap to record",
-            key=f"audio_input_{st.session_state.audio_key}"
+        # Voice accent selection
+        st.markdown("**🗣️ Voice**")
+        st.session_state.voice_accent = st.selectbox(
+            "Select accent:",
+            options=list(VOICE_ACCENTS.keys()),
+            index=list(VOICE_ACCENTS.keys()).index(st.session_state.voice_accent),
+            label_visibility="collapsed"
         )
-
-        if audio:
-            with st.spinner("Transcribing..."):
-                text = transcribe_audio(audio.read())
-                if text:
-                    st.session_state.pending_message = text
-                    st.session_state.audio_key += 1
 
         st.markdown("---")
 
-        # Text Input
+        # Text Input (fallback)
         st.markdown("**⌨️ Text Input**")
         text_input = st.text_input(
             "Type your message:",
@@ -370,9 +379,26 @@ else:
             end_cooking()
             st.rerun()
 
-    # Main area - Chat history (full width, taller)
+    # Custom CSS for large mic button
+    st.markdown("""
+    <style>
+        /* Make the audio input button larger and more touch-friendly */
+        div[data-testid="stAudioInput"] > button {
+            height: 80px !important;
+            min-height: 80px !important;
+            font-size: 20px !important;
+            border-radius: 40px !important;
+        }
+        div[data-testid="stAudioInput"] {
+            display: flex;
+            justify-content: center;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Main area - Chat history
     st.markdown("### 💬 Chat")
-    chat_container = st.container(height=600)
+    chat_container = st.container(height=450)
     with chat_container:
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
@@ -382,6 +408,24 @@ else:
     if st.session_state.pending_audio:
         st.audio(st.session_state.pending_audio, format="audio/mp3", autoplay=True)
         st.session_state.pending_audio = None
+
+    # Large mic button below chat (always visible, doesn't scroll)
+    st.markdown("---")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("<h3 style='text-align: center;'>🎤 Tap to Talk</h3>", unsafe_allow_html=True)
+        audio = st.audio_input(
+            "Record your message",
+            key=f"audio_input_{st.session_state.audio_key}",
+            label_visibility="collapsed"
+        )
+
+        if audio:
+            with st.spinner("Transcribing..."):
+                text = transcribe_audio(audio.read())
+                if text:
+                    st.session_state.pending_message = text
+                    st.session_state.audio_key += 1
 
     # Process message (from voice or text)
     message_to_send = None
@@ -411,7 +455,8 @@ else:
             st.session_state.messages.append({"role": "assistant", "content": response})
 
             # Generate TTS and store for playback after rerun
-            audio_bytes = text_to_speech(response)
+            accent_tld = VOICE_ACCENTS.get(st.session_state.voice_accent, "com")
+            audio_bytes = text_to_speech(response, tld=accent_tld)
             if audio_bytes:
                 st.session_state.pending_audio = audio_bytes
 
