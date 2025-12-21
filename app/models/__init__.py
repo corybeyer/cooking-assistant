@@ -9,13 +9,25 @@ from app.models.entities import (
     Ingredient,
     UnitOfMeasure,
     RecipeIngredient,
-    Step
+    Step,
+    ShoppingList,
+    ShoppingListRecipe,
+    ShoppingListItem,
+    ShoppingListLink,
+    GroceryPrice,
 )
 
 __all__ = [
+    # Recipe models
     "Recipe",
     "Ingredient",
     "UnitOfMeasure",
     "RecipeIngredient",
     "Step",
+    # Shopping list models
+    "ShoppingList",
+    "ShoppingListRecipe",
+    "ShoppingListItem",
+    "ShoppingListLink",
+    "GroceryPrice",
 ]
