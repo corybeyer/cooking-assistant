@@ -15,7 +15,7 @@ Table Relationships:
                      └──> (*) Step
 """
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean, Date, Numeric
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -142,3 +142,147 @@ class Step(Base):
 
     # Relationship
     recipe = relationship("Recipe", back_populates="steps")
+
+
+# ============================================
+# Shopping List Models
+# ============================================
+
+class ShoppingList(Base):
+    """
+    Shopping list for meal planning.
+
+    A shopping list aggregates ingredients from multiple recipes
+    and can be shared via a unique link code.
+    """
+    __tablename__ = "ShoppingLists"
+
+    ShoppingListId = Column(Integer, primary_key=True, autoincrement=True)
+    Name = Column(String(200), nullable=True)
+    CreatedDate = Column(DateTime, nullable=False, server_default=func.now())
+    Status = Column(String(50), nullable=False, default='active')  # active, completed, archived
+
+    # Relationships
+    recipes = relationship(
+        "ShoppingListRecipe",
+        back_populates="shopping_list",
+        cascade="all, delete-orphan"
+    )
+    items = relationship(
+        "ShoppingListItem",
+        back_populates="shopping_list",
+        cascade="all, delete-orphan"
+    )
+    links = relationship(
+        "ShoppingListLink",
+        back_populates="shopping_list",
+        cascade="all, delete-orphan"
+    )
+
+
+class ShoppingListRecipe(Base):
+    """
+    Links a shopping list to recipes with optional planning details.
+
+    Tracks which recipes are included in a meal plan, with optional
+    serving adjustments and scheduling information.
+    """
+    __tablename__ = "ShoppingListRecipes"
+
+    ShoppingListRecipeId = Column(Integer, primary_key=True, autoincrement=True)
+    ShoppingListId = Column(
+        Integer,
+        ForeignKey("ShoppingLists.ShoppingListId", ondelete="CASCADE"),
+        nullable=False
+    )
+    RecipeId = Column(
+        Integer,
+        ForeignKey("Recipes.RecipeId"),
+        nullable=False
+    )
+    Servings = Column(Integer, nullable=True)  # NULL = use recipe default
+    PlannedDate = Column(Date, nullable=True)
+    MealType = Column(String(50), nullable=True)  # breakfast, lunch, dinner, snack
+
+    # Relationships
+    shopping_list = relationship("ShoppingList", back_populates="recipes")
+    recipe = relationship("Recipe")
+
+
+class ShoppingListItem(Base):
+    """
+    Aggregated ingredient in a shopping list.
+
+    Represents a single item to buy, with quantity aggregated
+    across all recipes in the shopping list.
+    """
+    __tablename__ = "ShoppingListItems"
+
+    ShoppingListItemId = Column(Integer, primary_key=True, autoincrement=True)
+    ShoppingListId = Column(
+        Integer,
+        ForeignKey("ShoppingLists.ShoppingListId", ondelete="CASCADE"),
+        nullable=False
+    )
+    IngredientId = Column(
+        Integer,
+        ForeignKey("Ingredients.IngredientId"),
+        nullable=False
+    )
+    AggregatedQuantity = Column(String(100), nullable=True)  # "3 medium" or "2 lbs"
+    Category = Column(String(50), nullable=True)  # produce, meat, dairy, pantry
+    IsChecked = Column(Boolean, nullable=False, default=False)
+    SortOrder = Column(Integer, nullable=True)
+
+    # Relationships
+    shopping_list = relationship("ShoppingList", back_populates="items")
+    ingredient = relationship("Ingredient")
+
+
+class ShoppingListLink(Base):
+    """
+    Shareable link for a shopping list.
+
+    Provides a short, unique code that can be shared via SMS
+    to access the shopping list on mobile devices.
+    """
+    __tablename__ = "ShoppingListLinks"
+
+    LinkId = Column(Integer, primary_key=True, autoincrement=True)
+    ShoppingListId = Column(
+        Integer,
+        ForeignKey("ShoppingLists.ShoppingListId", ondelete="CASCADE"),
+        nullable=False
+    )
+    LinkCode = Column(String(20), nullable=False, unique=True)
+    CreatedDate = Column(DateTime, nullable=False, server_default=func.now())
+    ExpiresDate = Column(DateTime, nullable=True)
+
+    # Relationship
+    shopping_list = relationship("ShoppingList", back_populates="links")
+
+
+class GroceryPrice(Base):
+    """
+    Cached price data from grocery store APIs.
+
+    Stores price snapshots to avoid excessive API calls
+    and enable price comparison across stores.
+    """
+    __tablename__ = "GroceryPrices"
+
+    GroceryPriceId = Column(Integer, primary_key=True, autoincrement=True)
+    IngredientId = Column(
+        Integer,
+        ForeignKey("Ingredients.IngredientId"),
+        nullable=False
+    )
+    StoreName = Column(String(100), nullable=False)  # Kroger, Walmart, H-E-B
+    ProductName = Column(String(300), nullable=True)  # Actual product matched
+    ProductId = Column(String(100), nullable=True)  # Store's product ID
+    Price = Column(Numeric(10, 2), nullable=True)
+    Unit = Column(String(50), nullable=True)  # per lb, each, per oz
+    LastUpdated = Column(DateTime, nullable=False, server_default=func.now())
+
+    # Relationship
+    ingredient = relationship("Ingredient")
