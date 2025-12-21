@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     azure_speech_key: str = ""
     azure_speech_region: str = "centralus"
 
+    # Azure Communication Services (SMS)
+    azure_comm_connection_string: str = ""
+    azure_comm_sender_number: str = ""  # Format: +1XXXXXXXXXX
+
     # Note: Authentication handled by Azure Container Apps Easy Auth (Entra ID)
 
     @property

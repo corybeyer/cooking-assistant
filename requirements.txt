@@ -21,5 +21,8 @@ gTTS>=2.5.0                # Text-to-speech
 # Azure Speech (add later)
 # azure-cognitiveservices-speech==1.35.0
 
+# Azure Communication Services (SMS)
+azure-communication-sms>=1.0.1
+
 # Development
 python-dotenv==1.0.1

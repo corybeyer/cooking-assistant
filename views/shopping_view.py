@@ -99,19 +99,8 @@ class ShoppingView:
         st.progress(checked / total if total > 0 else 0)
         st.markdown("---")
 
-        # Share button
-        col1, col2 = st.columns([3, 1])
-        with col2:
-            if st.button("🔗 Share", use_container_width=True):
-                link_code = self.controller.generate_link(list_id)
-                st.session_state.shopping["link_code"] = link_code
-
-        # Show share link if generated
-        link_code = self.controller.get_link_code()
-        if link_code:
-            share_url = self.controller.get_shareable_url(link_code)
-            st.success(f"Share this link: `{share_url}`")
-            st.code(share_url)
+        # Share section
+        self._render_share_section(list_id)
 
         st.markdown("---")
 
@@ -129,6 +118,92 @@ class ShoppingView:
                 self._render_item(item)
 
             st.markdown("")
+
+    def _render_share_section(self, list_id: int):
+        """Render the share/send section."""
+        st.markdown("#### 📤 Share List")
+
+        tab1, tab2 = st.tabs(["📱 Send via SMS", "🔗 Copy Link"])
+
+        with tab1:
+            self._render_sms_section(list_id)
+
+        with tab2:
+            self._render_link_section(list_id)
+
+    def _render_sms_section(self, list_id: int):
+        """Render SMS send form."""
+        # Check if SMS is configured
+        if not self.controller.is_sms_configured():
+            st.warning("SMS is not configured. Please set up Azure Communication Services.")
+            st.markdown("Required environment variables:")
+            st.code("AZURE_COMM_CONNECTION_STRING\nAZURE_COMM_SENDER_NUMBER")
+            return
+
+        # Initialize session state for SMS
+        if "sms_phone" not in st.session_state:
+            st.session_state.sms_phone = ""
+        if "sms_sent" not in st.session_state:
+            st.session_state.sms_sent = False
+        if "sms_error" not in st.session_state:
+            st.session_state.sms_error = None
+
+        # Phone input
+        phone = st.text_input(
+            "Phone number:",
+            value=st.session_state.sms_phone,
+            placeholder="(555) 123-4567",
+            help="Enter a US phone number"
+        )
+        st.session_state.sms_phone = phone
+
+        # Send button
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            if st.button("📲 Send to Phone", type="primary", use_container_width=True):
+                if not phone:
+                    st.session_state.sms_error = "Please enter a phone number"
+                else:
+                    # Validate phone
+                    is_valid, message = self.controller.validate_phone(phone)
+                    if not is_valid:
+                        st.session_state.sms_error = message
+                    else:
+                        # Send SMS
+                        with st.spinner("Sending..."):
+                            result = self.controller.send_list_via_sms(list_id, phone)
+
+                        if result.success:
+                            st.session_state.sms_sent = True
+                            st.session_state.sms_error = None
+                        else:
+                            st.session_state.sms_error = result.error
+                            st.session_state.sms_sent = False
+
+                st.rerun()
+
+        # Show status
+        if st.session_state.sms_sent:
+            st.success("✅ Shopping list sent! Check your phone.")
+            st.session_state.sms_sent = False  # Reset for next time
+
+        if st.session_state.sms_error:
+            st.error(st.session_state.sms_error)
+            st.session_state.sms_error = None  # Reset for next time
+
+    def _render_link_section(self, list_id: int):
+        """Render shareable link section."""
+        if st.button("🔗 Generate Link", use_container_width=True):
+            link_code = self.controller.generate_link(list_id)
+            st.session_state.shopping["link_code"] = link_code
+            st.rerun()
+
+        link_code = self.controller.get_link_code()
+        if link_code:
+            share_url = self.controller.get_shareable_url(link_code)
+            st.success("Link generated!")
+            st.code(share_url)
+            st.caption("Copy this link and share it")
 
     def _render_item(self, item):
         """Render a single shopping list item with checkbox."""
