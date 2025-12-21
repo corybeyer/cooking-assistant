@@ -13,8 +13,8 @@ from datetime import datetime
 
 from services.claude_service import ClaudeService
 from services.recipe_service import RecipeService, RecipeSummary
+from services.shopping_list_service import ShoppingListService
 from app.database import SessionLocal
-from app.models.repositories import ShoppingListRepository
 
 
 class PlanningController:
@@ -128,9 +128,17 @@ class PlanningController:
         """Set the selected recipes for the plan."""
         st.session_state.planning["selected_recipes"] = recipe_ids
 
-    def confirm_plan(self, plan_name: Optional[str] = None) -> int:
+    def confirm_plan(
+        self,
+        plan_name: Optional[str] = None,
+        use_smart_aggregation: bool = False
+    ) -> int:
         """
-        Confirm the current plan and create a shopping list.
+        Confirm the current plan and create a shopping list with aggregated ingredients.
+
+        Args:
+            plan_name: Optional name for the plan
+            use_smart_aggregation: If True, use Claude for intelligent quantity aggregation
 
         Returns the shopping list ID.
         """
@@ -143,11 +151,15 @@ class PlanningController:
         if not plan_name:
             plan_name = f"Meal Plan - {datetime.now().strftime('%b %d, %Y')}"
 
-        # Create shopping list in database
+        # Create shopping list with aggregated ingredients
         db = SessionLocal()
         try:
-            repo = ShoppingListRepository(db)
-            shopping_list = repo.create_from_recipes(plan_name, recipe_ids)
+            service = ShoppingListService(db)
+            shopping_list = service.create_shopping_list_from_recipes(
+                name=plan_name,
+                recipe_ids=recipe_ids,
+                use_claude=use_smart_aggregation
+            )
             shopping_list_id = shopping_list.ShoppingListId
 
             st.session_state.planning["plan_confirmed"] = True
