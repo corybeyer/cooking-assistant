@@ -57,24 +57,13 @@ class PlanningView:
         )
 
     def _render_chat_area(self):
-        """Render main chat area with messages."""
+        """Render main chat area with messages only."""
         # Display chat messages using component
         render_chat_messages(self.controller.get_messages())
 
-        # Text input as alternative
-        st.markdown("---")
-        user_input = st.chat_input("Or type your message...")
-
-        if user_input:
-            with st.spinner("Thinking..."):
-                self.controller.send_message(user_input)
-            st.rerun()
-
-        # Quick prompts
-        self._render_quick_prompts()
-
     def _render_voice_panel(self):
-        """Render voice control panel."""
+        """Render voice control panel with all input methods."""
+        # Voice input
         audio_bytes = render_voice_panel(
             audio_key=self.controller.get_audio_key(),
             pending_audio=self.controller.get_pending_audio(),
@@ -93,22 +82,33 @@ class PlanningView:
             elif error:
                 st.warning(error)
 
-    def _render_quick_prompts(self):
-        """Render quick prompt buttons."""
+        # Text input as alternative
+        st.markdown("---")
+        st.markdown("**Or type:**")
+        user_input = st.text_input(
+            "Type your message",
+            key="planning_text_input",
+            placeholder="Type here...",
+            label_visibility="collapsed"
+        )
+
+        if user_input:
+            with st.spinner("Thinking..."):
+                self.controller.send_message(user_input)
+            st.rerun()
+
+        # Quick prompts (stacked vertically for narrow column)
+        st.markdown("---")
         st.markdown("**Quick prompts:**")
-        col1, col2, col3 = st.columns(3)
 
-        with col1:
-            if st.button("Healthy meals", use_container_width=True):
-                self.controller.send_message("I want healthy, nutritious meals")
-                st.rerun()
+        if st.button("Healthy meals", use_container_width=True, key="qp_healthy"):
+            self.controller.send_message("I want healthy, nutritious meals")
+            st.rerun()
 
-        with col2:
-            if st.button("Quick & easy", use_container_width=True):
-                self.controller.send_message("I need quick meals under 30 minutes")
-                st.rerun()
+        if st.button("Quick & easy", use_container_width=True, key="qp_quick"):
+            self.controller.send_message("I need quick meals under 30 minutes")
+            st.rerun()
 
-        with col3:
-            if st.button("Special occasion", use_container_width=True):
-                self.controller.send_message("I'm planning for a special occasion")
-                st.rerun()
+        if st.button("Special occasion", use_container_width=True, key="qp_special"):
+            self.controller.send_message("I'm planning for a special occasion")
+            st.rerun()
