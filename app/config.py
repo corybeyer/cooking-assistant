@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     # Sender phone number (required for both options)
     azure_comm_sender_number: str = ""  # Format: +1XXXXXXXXXX
 
+    # App base URL (for shareable links in SMS)
+    app_base_url: str = ""  # e.g., https://your-app.azurecontainerapps.io
+
     # Note: Authentication handled by Azure Container Apps Easy Auth (Entra ID)
 
     @property

@@ -135,11 +135,21 @@ class ShoppingView:
         """Render SMS send form."""
         # Check if SMS is configured
         if not self.controller.is_sms_configured():
-            st.warning("SMS is not configured. Please set up Azure Communication Services.")
-            st.markdown("**Option 1: Managed Identity (recommended for Azure)**")
-            st.code("AZURE_COMM_ENDPOINT=https://<resource>.communication.azure.com\nAZURE_COMM_SENDER_NUMBER=+1XXXXXXXXXX")
-            st.markdown("**Option 2: Connection String (for local dev)**")
-            st.code("AZURE_COMM_CONNECTION_STRING=endpoint=...\nAZURE_COMM_SENDER_NUMBER=+1XXXXXXXXXX")
+            issues = self.controller.get_sms_config_issues()
+            st.warning("SMS is not fully configured. Missing settings:")
+            for issue in issues:
+                st.error(f"• {issue}")
+            with st.expander("Configuration Help"):
+                st.markdown("**Required environment variables:**")
+                st.code("""# Azure Communication Services
+AZURE_COMM_ENDPOINT=https://<resource>.communication.azure.com
+AZURE_COMM_SENDER_NUMBER=+1XXXXXXXXXX
+
+# App URL for shareable links
+APP_BASE_URL=https://your-app.azurecontainerapps.io""")
+
+            # Still allow test SMS if Azure Comm is configured (just missing base URL)
+            self._render_test_sms_section()
             return
 
         # Initialize session state for SMS
@@ -206,6 +216,34 @@ class ShoppingView:
             st.success("Link generated!")
             st.code(share_url)
             st.caption("Copy this link and share it")
+
+    def _render_test_sms_section(self):
+        """Render test SMS section for debugging configuration."""
+        from services.notification_service import NotificationService
+
+        notification = NotificationService()
+        if not notification.is_configured():
+            return
+
+        with st.expander("🔧 Test SMS Configuration"):
+            st.markdown("Send a test message to verify SMS is working:")
+            test_phone = st.text_input(
+                "Test phone number:",
+                placeholder="(555) 123-4567",
+                key="test_sms_phone"
+            )
+
+            if st.button("📲 Send Test SMS", key="send_test_sms"):
+                if not test_phone:
+                    st.error("Enter a phone number")
+                else:
+                    with st.spinner("Sending test SMS..."):
+                        result = self.controller.send_test_sms(test_phone)
+
+                    if result.success:
+                        st.success(f"✅ Test SMS sent! Message ID: {result.message_id}")
+                    else:
+                        st.error(f"❌ Failed: {result.error}")
 
     def _render_item(self, item):
         """Render a single shopping list item with checkbox."""
