@@ -11,10 +11,11 @@ import streamlit as st
 from typing import Optional
 from dataclasses import dataclass
 
+from app.config import get_settings
 from app.database import SessionLocal
 from app.models import ShoppingList, ShoppingListItem
 from app.models.repositories import ShoppingListRepository
-from services.notification_service import NotificationService, SMSResult
+from services.notification_service import NotificationService, SMSResult, EmailResult
 
 
 @dataclass
@@ -159,9 +160,9 @@ class ShoppingController:
 
     def get_shareable_url(self, link_code: str) -> str:
         """Get the full shareable URL for a link code."""
-        # In production, this would use the actual domain
-        # For now, construct a relative URL
-        return f"/Shopping_List?code={link_code}"
+        settings = get_settings()
+        base_url = settings.app_base_url.rstrip('/') if settings.app_base_url else ""
+        return f"{base_url}/Shopping_List?code={link_code}"
 
     # ==========================================
     # List Management
@@ -194,15 +195,31 @@ class ShoppingController:
     # ==========================================
 
     def is_sms_configured(self) -> bool:
-        """Check if SMS is properly configured."""
+        """Check if SMS is properly configured (including app base URL)."""
         notification = NotificationService()
-        return notification.is_configured()
+        settings = get_settings()
+        has_base_url = bool(settings.app_base_url)
+        return notification.is_configured() and has_base_url
+
+    def get_sms_config_issues(self) -> list[str]:
+        """Get list of SMS configuration issues."""
+        issues = []
+        notification = NotificationService()
+        settings = get_settings()
+
+        if not settings.azure_comm_endpoint and not settings.azure_comm_connection_string:
+            issues.append("Missing AZURE_COMM_ENDPOINT or AZURE_COMM_CONNECTION_STRING")
+        if not settings.azure_comm_sender_number:
+            issues.append("Missing AZURE_COMM_SENDER_NUMBER")
+        if not settings.app_base_url:
+            issues.append("Missing APP_BASE_URL (required for SMS links)")
+
+        return issues
 
     def send_list_via_sms(
         self,
         list_id: int,
         phone_number: str,
-        base_url: str = ""
     ) -> SMSResult:
         """
         Send shopping list to a phone number via SMS.
@@ -210,7 +227,6 @@ class ShoppingController:
         Args:
             list_id: Shopping list ID
             phone_number: Recipient's phone number
-            base_url: Base URL for the app (for building share link)
 
         Returns:
             SMSResult with success status
@@ -218,8 +234,8 @@ class ShoppingController:
         # Get or create link code
         link_code = self.generate_link(list_id)
 
-        # Build full URL
-        share_url = f"{base_url}/Shopping_List?code={link_code}" if base_url else self.get_shareable_url(link_code)
+        # Build full URL (uses APP_BASE_URL from config)
+        share_url = self.get_shareable_url(link_code)
 
         # Get list details
         shopping_list = self.get_list(list_id)
@@ -242,3 +258,66 @@ class ShoppingController:
         """Validate a phone number. Returns (is_valid, message)."""
         notification = NotificationService()
         return notification.validate_phone_number(phone)
+
+    def send_test_sms(self, phone_number: str) -> SMSResult:
+        """Send a test SMS to verify configuration."""
+        notification = NotificationService()
+        return notification.send_test_sms(phone_number)
+
+    # ==========================================
+    # Email Operations
+    # ==========================================
+
+    def is_email_configured(self) -> bool:
+        """Check if Email is properly configured (including app base URL)."""
+        notification = NotificationService()
+        settings = get_settings()
+        has_base_url = bool(settings.app_base_url)
+        return notification.is_email_configured() and has_base_url
+
+    def get_email_config_issues(self) -> list[str]:
+        """Get list of Email configuration issues."""
+        issues = []
+        settings = get_settings()
+
+        if not settings.azure_comm_email_endpoint:
+            issues.append("Missing AZURE_COMM_EMAIL_ENDPOINT")
+        if not settings.azure_comm_email_sender:
+            issues.append("Missing AZURE_COMM_EMAIL_SENDER")
+        if not settings.app_base_url:
+            issues.append("Missing APP_BASE_URL (required for email links)")
+
+        return issues
+
+    def send_list_via_email(self, list_id: int, email: str) -> EmailResult:
+        """Send shopping list to an email address."""
+        # Get or create link code
+        link_code = self.generate_link(list_id)
+        share_url = self.get_shareable_url(link_code)
+
+        # Get list details
+        shopping_list = self.get_list(list_id)
+        if not shopping_list:
+            return EmailResult(success=False, error="Shopping list not found")
+
+        list_name = shopping_list.Name or "Shopping List"
+        item_count = len(shopping_list.items) if shopping_list.items else 0
+
+        # Send Email
+        notification = NotificationService()
+        return notification.send_shopping_list_email(
+            to_email=email,
+            list_name=list_name,
+            item_count=item_count,
+            share_url=share_url
+        )
+
+    def validate_email(self, email: str) -> tuple[bool, str]:
+        """Validate an email address. Returns (is_valid, message)."""
+        notification = NotificationService()
+        return notification.validate_email(email)
+
+    def send_test_email(self, email: str) -> EmailResult:
+        """Send a test email to verify configuration."""
+        notification = NotificationService()
+        return notification.send_test_email(email)

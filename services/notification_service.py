@@ -1,7 +1,7 @@
 """
-Notification Service - handles SMS delivery via Azure Communication Services.
+Notification Service - handles SMS and Email delivery via Azure Communication Services.
 
-This service sends shopping list links to users via SMS.
+This service sends shopping list links to users via SMS or Email.
 
 Supports two authentication methods:
 1. Managed Identity (preferred in Azure) - set AZURE_COMM_ENDPOINT
@@ -26,12 +26,21 @@ class SMSResult:
     error: Optional[str] = None
 
 
+@dataclass
+class EmailResult:
+    """Result of an email send attempt."""
+    success: bool
+    message_id: Optional[str] = None
+    error: Optional[str] = None
+
+
 class NotificationService:
     """Service for sending notifications (SMS, email, etc.)."""
 
     def __init__(self):
         self.settings = get_settings()
         self._client = None
+        self._email_client = None
 
     def _get_client(self):
         """
@@ -205,3 +214,169 @@ class NotificationService:
         except Exception as e:
             logger.error(f"Test SMS error: {e}")
             return SMSResult(success=False, error=str(e))
+
+    # ==========================================
+    # Email Methods
+    # ==========================================
+
+    def _get_email_client(self):
+        """Lazy-load the Email client using Managed Identity."""
+        if self._email_client is None:
+            try:
+                from azure.communication.email import EmailClient
+
+                endpoint = self.settings.azure_comm_email_endpoint
+                if endpoint:
+                    from azure.identity import DefaultAzureCredential
+                    credential = DefaultAzureCredential()
+                    self._email_client = EmailClient(endpoint, credential)
+                    logger.info("Email client initialized with Managed Identity")
+
+            except ImportError as e:
+                logger.warning(f"Email package not installed: {e}")
+            except Exception as e:
+                logger.error(f"Failed to create Email client: {e}")
+        return self._email_client
+
+    def is_email_configured(self) -> bool:
+        """Check if Email is properly configured."""
+        has_endpoint = bool(self.settings.azure_comm_email_endpoint)
+        has_sender = bool(self.settings.azure_comm_email_sender)
+        return has_endpoint and has_sender
+
+    def validate_email(self, email: str) -> tuple[bool, str]:
+        """Validate an email address. Returns (is_valid, email_or_error)."""
+        email = email.strip().lower()
+        # Simple email validation
+        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if re.match(pattern, email):
+            return True, email
+        return False, "Please enter a valid email address"
+
+    def send_shopping_list_email(
+        self,
+        to_email: str,
+        list_name: str,
+        item_count: int,
+        share_url: str
+    ) -> EmailResult:
+        """
+        Send a shopping list link via email.
+
+        Args:
+            to_email: Recipient email address
+            list_name: Name of the shopping list
+            item_count: Number of items in the list
+            share_url: Full URL to the shopping list
+
+        Returns:
+            EmailResult with success status
+        """
+        # Validate email
+        is_valid, result = self.validate_email(to_email)
+        if not is_valid:
+            return EmailResult(success=False, error=result)
+
+        validated_email = result
+
+        # Check if configured
+        if not self.is_email_configured():
+            return EmailResult(
+                success=False,
+                error="Email is not configured. Please set up Azure Communication Services Email."
+            )
+
+        try:
+            client = self._get_email_client()
+            if not client:
+                return EmailResult(success=False, error="Email client not available")
+
+            # Build email message
+            message = {
+                "senderAddress": self.settings.azure_comm_email_sender,
+                "recipients": {
+                    "to": [{"address": validated_email}]
+                },
+                "content": {
+                    "subject": f"Your Shopping List: {list_name}",
+                    "html": f"""
+                        <html>
+                        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                            <h2>Your shopping list is ready!</h2>
+                            <p><strong>{list_name}</strong></p>
+                            <p>{item_count} items to get</p>
+                            <p>
+                                <a href="{share_url}"
+                                   style="display: inline-block; padding: 12px 24px;
+                                          background-color: #4CAF50; color: white;
+                                          text-decoration: none; border-radius: 4px;">
+                                    View Shopping List
+                                </a>
+                            </p>
+                            <p style="color: #666; font-size: 12px;">
+                                Or copy this link: {share_url}
+                            </p>
+                        </body>
+                        </html>
+                    """,
+                    "plainText": f"Your shopping list is ready!\n\n{list_name}\n{item_count} items\n\nView your list: {share_url}"
+                }
+            }
+
+            # Send email (this is async, we poll for status)
+            poller = client.begin_send(message)
+            result = poller.result()
+
+            if result["status"] == "Succeeded":
+                return EmailResult(success=True, message_id=result.get("id"))
+            else:
+                return EmailResult(
+                    success=False,
+                    error=f"Email failed: {result.get('error', {}).get('message', 'Unknown error')}"
+                )
+
+        except Exception as e:
+            logger.error(f"Email send error: {e}")
+            return EmailResult(success=False, error=f"Failed to send email: {str(e)}")
+
+    def send_test_email(self, to_email: str) -> EmailResult:
+        """Send a test email to verify configuration."""
+        is_valid, result = self.validate_email(to_email)
+        if not is_valid:
+            return EmailResult(success=False, error=result)
+
+        validated_email = result
+
+        if not self.is_email_configured():
+            return EmailResult(success=False, error="Email is not configured")
+
+        try:
+            client = self._get_email_client()
+            if not client:
+                return EmailResult(success=False, error="Email client not available")
+
+            message = {
+                "senderAddress": self.settings.azure_comm_email_sender,
+                "recipients": {
+                    "to": [{"address": validated_email}]
+                },
+                "content": {
+                    "subject": "Test from Cooking Assistant",
+                    "plainText": "This is a test email from your Cooking Assistant app!"
+                }
+            }
+
+            poller = client.begin_send(message)
+            result = poller.result()
+
+            if result["status"] == "Succeeded":
+                return EmailResult(success=True, message_id=result.get("id"))
+            else:
+                return EmailResult(
+                    success=False,
+                    error=result.get("error", {}).get("message", "Unknown error")
+                )
+
+        except Exception as e:
+            logger.error(f"Test email error: {e}")
+            return EmailResult(success=False, error=str(e))
