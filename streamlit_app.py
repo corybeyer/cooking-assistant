@@ -49,3 +49,19 @@ with col2:
 
 st.markdown("---")
 st.markdown("*Use the sidebar to navigate between pages.*")
+
+# Documentation download
+with st.sidebar:
+    st.markdown("---")
+    st.markdown("### 📄 Documentation")
+    try:
+        with open("docs/SHOPPING-LIST-FEATURE.md", "r") as f:
+            doc_content = f.read()
+        st.download_button(
+            label="Download Design Doc",
+            data=doc_content,
+            file_name="SHOPPING-LIST-FEATURE.md",
+            mime="text/markdown"
+        )
+    except FileNotFoundError:
+        pass
