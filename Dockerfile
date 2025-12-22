@@ -18,14 +18,13 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code (shared modules: config, database, models)
-COPY app/ ./app/
-
-# Copy Streamlit pages and supporting modules
-COPY pages/ ./pages/
+# Copy application code (MVC structure)
+COPY config/ ./config/
+COPY models/ ./models/
 COPY views/ ./views/
 COPY controllers/ ./controllers/
 COPY services/ ./services/
+COPY pages/ ./pages/
 
 # Copy Streamlit app
 COPY streamlit_app.py .
