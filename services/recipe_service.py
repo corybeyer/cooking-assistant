@@ -9,8 +9,8 @@ from typing import Optional
 
 from sqlalchemy.orm import joinedload
 
-from app.database import SessionLocal
-from app.models import Recipe, RecipeIngredient
+from config.database import SessionLocal
+from models import Recipe, RecipeIngredient
 
 
 @dataclass

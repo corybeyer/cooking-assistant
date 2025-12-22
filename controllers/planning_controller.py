@@ -16,7 +16,7 @@ from services.claude_service import ClaudeService
 from services.recipe_service import RecipeService, RecipeSummary
 from services.shopping_list_service import ShoppingListService
 from services.audio_service import AudioService
-from app.database import SessionLocal
+from config.database import SessionLocal
 
 
 class PlanningController:

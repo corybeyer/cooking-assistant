@@ -4,7 +4,7 @@ Models Package - Database Entities
 This package contains SQLAlchemy ORM models for the Cooking Assistant database.
 """
 
-from app.models.entities import (
+from models.entities import (
     Recipe,
     Ingredient,
     UnitOfMeasure,

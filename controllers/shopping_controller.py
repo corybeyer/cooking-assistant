@@ -11,10 +11,10 @@ import streamlit as st
 from typing import Optional
 from dataclasses import dataclass
 
-from app.config import get_settings
-from app.database import SessionLocal
-from app.models import ShoppingList, ShoppingListItem
-from app.models.repositories import ShoppingListRepository
+from config.settings import get_settings
+from config.database import SessionLocal
+from models import ShoppingList, ShoppingListItem
+from models.repositories import ShoppingListRepository
 from services.notification_service import NotificationService, SMSResult, EmailResult
 
 
