@@ -136,8 +136,10 @@ class ShoppingView:
         # Check if SMS is configured
         if not self.controller.is_sms_configured():
             st.warning("SMS is not configured. Please set up Azure Communication Services.")
-            st.markdown("Required environment variables:")
-            st.code("AZURE_COMM_CONNECTION_STRING\nAZURE_COMM_SENDER_NUMBER")
+            st.markdown("**Option 1: Managed Identity (recommended for Azure)**")
+            st.code("AZURE_COMM_ENDPOINT=https://<resource>.communication.azure.com\nAZURE_COMM_SENDER_NUMBER=+1XXXXXXXXXX")
+            st.markdown("**Option 2: Connection String (for local dev)**")
+            st.code("AZURE_COMM_CONNECTION_STRING=endpoint=...\nAZURE_COMM_SENDER_NUMBER=+1XXXXXXXXXX")
             return
 
         # Initialize session state for SMS

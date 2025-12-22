@@ -23,7 +23,11 @@ class Settings(BaseSettings):
     azure_speech_region: str = "centralus"
 
     # Azure Communication Services (SMS)
+    # Option 1: Use Managed Identity (preferred in Azure)
+    azure_comm_endpoint: str = ""  # Format: https://<resource-name>.communication.azure.com
+    # Option 2: Use connection string (for local development)
     azure_comm_connection_string: str = ""
+    # Sender phone number (required for both options)
     azure_comm_sender_number: str = ""  # Format: +1XXXXXXXXXX
 
     # Note: Authentication handled by Azure Container Apps Easy Auth (Entra ID)

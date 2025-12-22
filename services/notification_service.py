@@ -2,6 +2,10 @@
 Notification Service - handles SMS delivery via Azure Communication Services.
 
 This service sends shopping list links to users via SMS.
+
+Supports two authentication methods:
+1. Managed Identity (preferred in Azure) - set AZURE_COMM_ENDPOINT
+2. Connection String (for local dev) - set AZURE_COMM_CONNECTION_STRING
 """
 
 import re
@@ -30,25 +34,43 @@ class NotificationService:
         self._client = None
 
     def _get_client(self):
-        """Lazy-load the SMS client."""
+        """
+        Lazy-load the SMS client.
+
+        Prefers Managed Identity (endpoint) over connection string.
+        """
         if self._client is None:
             try:
                 from azure.communication.sms import SmsClient
+
+                endpoint = self.settings.azure_comm_endpoint
                 connection_string = self.settings.azure_comm_connection_string
-                if connection_string:
+
+                if endpoint:
+                    # Use Managed Identity authentication
+                    from azure.identity import DefaultAzureCredential
+                    credential = DefaultAzureCredential()
+                    self._client = SmsClient(endpoint, credential)
+                    logger.info("SMS client initialized with Managed Identity")
+                elif connection_string:
+                    # Fall back to connection string
                     self._client = SmsClient.from_connection_string(connection_string)
-            except ImportError:
-                logger.warning("azure-communication-sms not installed")
+                    logger.info("SMS client initialized with connection string")
+
+            except ImportError as e:
+                logger.warning(f"Required package not installed: {e}")
             except Exception as e:
                 logger.error(f"Failed to create SMS client: {e}")
         return self._client
 
     def is_configured(self) -> bool:
         """Check if SMS is properly configured."""
-        return bool(
-            self.settings.azure_comm_connection_string and
-            self.settings.azure_comm_sender_number
+        has_auth = bool(
+            self.settings.azure_comm_endpoint or
+            self.settings.azure_comm_connection_string
         )
+        has_sender = bool(self.settings.azure_comm_sender_number)
+        return has_auth and has_sender
 
     def validate_phone_number(self, phone: str) -> tuple[bool, str]:
         """
