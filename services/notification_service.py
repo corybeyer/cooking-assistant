@@ -13,7 +13,7 @@ import logging
 from typing import Optional
 from dataclasses import dataclass
 
-from app.config import get_settings
+from config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 

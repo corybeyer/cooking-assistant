@@ -6,7 +6,7 @@ making it easy to test and reuse across different contexts.
 """
 
 import anthropic
-from app.config import get_settings
+from config.settings import get_settings
 
 
 class ClaudeService:

@@ -15,14 +15,14 @@ from collections import defaultdict
 
 from sqlalchemy.orm import Session, joinedload
 
-from app.models import (
+from models import (
     Recipe,
     RecipeIngredient,
     Ingredient,
     ShoppingList,
     ShoppingListItem,
 )
-from app.models.repositories import ShoppingListRepository
+from models.repositories import ShoppingListRepository
 from services.claude_service import ClaudeService
 
 
