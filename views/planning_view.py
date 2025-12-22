@@ -9,6 +9,7 @@ import streamlit as st
 
 from controllers.planning_controller import PlanningController
 from views.components.chat import render_chat_messages
+from views.components.audio import render_mic_button, render_audio_playback
 from views.components.sidebar import render_planning_sidebar
 
 
@@ -23,7 +24,31 @@ class PlanningView:
         st.title("Meal Planner")
         st.markdown("Chat with me to plan your meals for the week!")
 
-        # Sidebar with recipe selection and plan summary
+        # Sidebar with recipe selection, plan summary, and voice settings
+        self._render_sidebar()
+
+        # Main chat area with voice support
+        self._render_chat_area()
+
+    def _render_sidebar(self):
+        """Render sidebar with voice accent selection."""
+        with st.sidebar:
+            # Voice accent selector at top
+            st.markdown("### Voice Settings")
+            accents = self.controller.get_available_accents()
+            current_accent = self.controller.get_voice_accent()
+            selected_accent = st.selectbox(
+                "Voice accent:",
+                options=accents,
+                index=accents.index(current_accent) if current_accent in accents else 0,
+                key="planning_voice_accent"
+            )
+            if selected_accent != current_accent:
+                self.controller.set_voice_accent(selected_accent)
+
+            st.markdown("---")
+
+        # Delegate rest of sidebar to component
         render_planning_sidebar(
             selected_recipes=self.controller.get_selected_recipe_details(),
             all_recipes=self.controller.get_all_recipes(),
@@ -35,11 +60,8 @@ class PlanningView:
             on_clear=self.controller.clear_conversation,
         )
 
-        # Main chat area
-        self._render_chat_area()
-
     def _render_chat_area(self):
-        """Render main chat area."""
+        """Render main chat area with voice support."""
         messages = self.controller.get_messages()
 
         # Start conversation if empty
@@ -51,10 +73,26 @@ class PlanningView:
         # Display chat messages using component
         render_chat_messages(messages)
 
-        # Chat input
-        st.markdown("---")
+        # Play any pending audio
+        pending_audio = self.controller.get_pending_audio()
+        render_audio_playback(pending_audio)
 
-        user_input = st.chat_input("Type your message...")
+        # Voice input button
+        audio_bytes = render_mic_button(self.controller.get_audio_key())
+
+        if audio_bytes:
+            with st.spinner("Transcribing..."):
+                success, error = self.controller.handle_voice_input(audio_bytes)
+
+            if success:
+                self.controller.increment_audio_key()
+                st.rerun()
+            elif error:
+                st.warning(error)
+
+        # Text input as alternative
+        st.markdown("---")
+        user_input = st.chat_input("Or type your message...")
 
         if user_input:
             with st.spinner("Thinking..."):
