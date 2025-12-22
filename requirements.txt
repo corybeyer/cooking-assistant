@@ -23,6 +23,7 @@ gTTS>=2.5.0                # Text-to-speech
 
 # Azure Communication Services (SMS)
 azure-communication-sms>=1.0.1
+azure-communication-email>=1.0.0  # For email notifications
 azure-identity>=1.15.0  # For Managed Identity authentication
 
 # Development
