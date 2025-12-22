@@ -123,16 +123,83 @@ class ShoppingView:
         """Render the share/send section."""
         st.markdown("#### 📤 Share List")
 
-        tab1, tab2 = st.tabs(["📱 Send via SMS", "🔗 Copy Link"])
+        tab1, tab2 = st.tabs(["📧 Send via Email", "🔗 Copy Link"])
 
         with tab1:
-            self._render_sms_section(list_id)
+            self._render_email_section(list_id)
 
         with tab2:
             self._render_link_section(list_id)
 
+    def _render_email_section(self, list_id: int):
+        """Render email send form."""
+        # Check if Email is configured
+        if not self.controller.is_email_configured():
+            issues = self.controller.get_email_config_issues()
+            st.warning("Email is not fully configured. Missing settings:")
+            for issue in issues:
+                st.error(f"• {issue}")
+            with st.expander("Configuration Help"):
+                st.markdown("**Required environment variables:**")
+                st.code("""# Azure Communication Services Email
+AZURE_COMM_EMAIL_ENDPOINT=https://<resource>.communication.azure.com
+AZURE_COMM_EMAIL_SENDER=DoNotReply@<guid>.azurecomm.net
+
+# App URL for shareable links
+APP_BASE_URL=https://your-app.azurecontainerapps.io""")
+            return
+
+        # Initialize session state for Email
+        if "share_email" not in st.session_state:
+            st.session_state.share_email = ""
+        if "email_sent" not in st.session_state:
+            st.session_state.email_sent = False
+        if "email_error" not in st.session_state:
+            st.session_state.email_error = None
+
+        # Email input
+        email = st.text_input(
+            "Email address:",
+            value=st.session_state.share_email,
+            placeholder="you@example.com",
+            help="Enter an email address"
+        )
+        st.session_state.share_email = email
+
+        # Send button
+        if st.button("📧 Send to Email", type="primary", use_container_width=True):
+            if not email:
+                st.session_state.email_error = "Please enter an email address"
+            else:
+                # Validate email
+                is_valid, message = self.controller.validate_email(email)
+                if not is_valid:
+                    st.session_state.email_error = message
+                else:
+                    # Send email
+                    with st.spinner("Sending..."):
+                        result = self.controller.send_list_via_email(list_id, email)
+
+                    if result.success:
+                        st.session_state.email_sent = True
+                        st.session_state.email_error = None
+                    else:
+                        st.session_state.email_error = result.error
+                        st.session_state.email_sent = False
+
+            st.rerun()
+
+        # Show status
+        if st.session_state.email_sent:
+            st.success("✅ Shopping list sent! Check your email.")
+            st.session_state.email_sent = False  # Reset for next time
+
+        if st.session_state.email_error:
+            st.error(st.session_state.email_error)
+            st.session_state.email_error = None  # Reset for next time
+
     def _render_sms_section(self, list_id: int):
-        """Render SMS send form."""
+        """Render SMS send form (kept for backwards compatibility)."""
         # Check if SMS is configured
         if not self.controller.is_sms_configured():
             issues = self.controller.get_sms_config_issues()

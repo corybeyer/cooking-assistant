@@ -15,7 +15,7 @@ from app.config import get_settings
 from app.database import SessionLocal
 from app.models import ShoppingList, ShoppingListItem
 from app.models.repositories import ShoppingListRepository
-from services.notification_service import NotificationService, SMSResult
+from services.notification_service import NotificationService, SMSResult, EmailResult
 
 
 @dataclass
@@ -263,3 +263,61 @@ class ShoppingController:
         """Send a test SMS to verify configuration."""
         notification = NotificationService()
         return notification.send_test_sms(phone_number)
+
+    # ==========================================
+    # Email Operations
+    # ==========================================
+
+    def is_email_configured(self) -> bool:
+        """Check if Email is properly configured (including app base URL)."""
+        notification = NotificationService()
+        settings = get_settings()
+        has_base_url = bool(settings.app_base_url)
+        return notification.is_email_configured() and has_base_url
+
+    def get_email_config_issues(self) -> list[str]:
+        """Get list of Email configuration issues."""
+        issues = []
+        settings = get_settings()
+
+        if not settings.azure_comm_email_endpoint:
+            issues.append("Missing AZURE_COMM_EMAIL_ENDPOINT")
+        if not settings.azure_comm_email_sender:
+            issues.append("Missing AZURE_COMM_EMAIL_SENDER")
+        if not settings.app_base_url:
+            issues.append("Missing APP_BASE_URL (required for email links)")
+
+        return issues
+
+    def send_list_via_email(self, list_id: int, email: str) -> EmailResult:
+        """Send shopping list to an email address."""
+        # Get or create link code
+        link_code = self.generate_link(list_id)
+        share_url = self.get_shareable_url(link_code)
+
+        # Get list details
+        shopping_list = self.get_list(list_id)
+        if not shopping_list:
+            return EmailResult(success=False, error="Shopping list not found")
+
+        list_name = shopping_list.Name or "Shopping List"
+        item_count = len(shopping_list.items) if shopping_list.items else 0
+
+        # Send Email
+        notification = NotificationService()
+        return notification.send_shopping_list_email(
+            to_email=email,
+            list_name=list_name,
+            item_count=item_count,
+            share_url=share_url
+        )
+
+    def validate_email(self, email: str) -> tuple[bool, str]:
+        """Validate an email address. Returns (is_valid, message)."""
+        notification = NotificationService()
+        return notification.validate_email(email)
+
+    def send_test_email(self, email: str) -> EmailResult:
+        """Send a test email to verify configuration."""
+        notification = NotificationService()
+        return notification.send_test_email(email)
