@@ -10,6 +10,7 @@ import streamlit as st
 from controllers.cooking_controller import CookingController
 from views.components.chat import render_chat_messages
 from views.components.audio import render_mic_button, render_audio_playback
+from views.components.sidebar import render_cooking_sidebar
 
 
 class CookingView:
@@ -20,7 +21,7 @@ class CookingView:
 
     def render(self):
         """Main render method - displays appropriate UI based on state."""
-        st.title("🍳 Cooking Assistant")
+        st.title("Cooking Assistant")
 
         if not self.controller.is_session_active():
             self._render_recipe_selection()
@@ -49,10 +50,10 @@ class CookingView:
             st.markdown(f"""
             **{recipe.description or 'No description'}**
 
-            ⏱️ Prep: {recipe.prep_time or '?'} min | 🍳 Cook: {recipe.cook_time or '?'} min | 🍽️ Serves: {recipe.servings or '?'}
+            Prep: {recipe.prep_time or '?'} min | Cook: {recipe.cook_time or '?'} min | Serves: {recipe.servings or '?'}
             """)
 
-            if st.button("🚀 Start Cooking", type="primary", use_container_width=True):
+            if st.button("Start Cooking", type="primary", use_container_width=True):
                 if self.controller.start_session(recipe_options[selected_name]):
                     st.rerun()
                 else:
@@ -60,58 +61,22 @@ class CookingView:
 
     def _render_cooking_session(self):
         """Render active cooking session."""
-        self._render_sidebar()
+        # Sidebar
+        render_cooking_sidebar(
+            recipe_name=self.controller.get_recipe_name(),
+            accents=self.controller.get_available_accents(),
+            current_accent=self.controller.get_voice_accent(),
+            on_accent_change=self.controller.set_voice_accent,
+            on_text_submit=self.controller.send_message,
+            on_end_session=self.controller.end_session,
+        )
+
+        # Main chat area
         self._render_chat_area()
-
-    def _render_sidebar(self):
-        """Render sidebar with controls."""
-        with st.sidebar:
-            st.markdown(f"### 📖 {self.controller.get_recipe_name()}")
-            st.markdown("---")
-
-            # Voice accent selection
-            st.markdown("**🗣️ Voice**")
-            accents = self.controller.get_available_accents()
-            current_accent = self.controller.get_voice_accent()
-
-            selected_accent = st.selectbox(
-                "Select accent:",
-                options=accents,
-                index=accents.index(current_accent) if current_accent in accents else 0,
-                label_visibility="collapsed"
-            )
-            if selected_accent != current_accent:
-                self.controller.set_voice_accent(selected_accent)
-
-            st.markdown("---")
-
-            # Text Input (fallback)
-            st.markdown("**⌨️ Text Input**")
-            text_input = st.text_input(
-                "Type your message:",
-                key="text_input",
-                placeholder="What's next?",
-                label_visibility="collapsed"
-            )
-
-            # Handle text input
-            if text_input:
-                success, error = self.controller.send_message(text_input)
-                if not success:
-                    st.error(error)
-                else:
-                    st.rerun()
-
-            st.markdown("---")
-
-            # End session button
-            if st.button("🛑 End Cooking Session", type="secondary", use_container_width=True):
-                self.controller.end_session()
-                st.rerun()
 
     def _render_chat_area(self):
         """Render main chat area with messages and voice input."""
-        st.markdown("### 💬 Chat")
+        st.markdown("### Chat")
 
         # Display chat messages
         render_chat_messages(self.controller.get_messages())
