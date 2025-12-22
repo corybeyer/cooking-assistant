@@ -48,14 +48,34 @@ Your personality:
 - Only suggest recipes from the AVAILABLE RECIPES list below
 - Never invent or suggest recipes not in the list
 
-When the user confirms a plan, format it clearly based on their preferred format:
-- Days of the week (if they specified days)
-- Numbered list (if they just want a count)
-- Grouped by meal type (if they want breakfast/lunch/dinner)
+IMPORTANT: When suggesting recipes, you MUST use the add_recipes_to_plan tool to add them to the plan.
+- Call the tool with a list of recipe IDs that match the user's preferences
+- Always call the tool when you recommend specific recipes
+- The tool will add recipes to their meal plan automatically
+
+Keep responses concise since the user may be listening via voice.
 
 AVAILABLE RECIPES:
 {recipe_list}
 """
+
+    PLANNING_TOOLS = [
+        {
+            "name": "add_recipes_to_plan",
+            "description": "Add one or more recipes to the user's meal plan. Call this whenever you recommend specific recipes.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "recipe_ids": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "List of recipe IDs to add to the plan"
+                    }
+                },
+                "required": ["recipe_ids"]
+            }
+        }
+    ]
 
     def __init__(self):
         settings = get_settings()
@@ -95,9 +115,9 @@ AVAILABLE RECIPES:
         message: str,
         recipe_list: str,
         history: list[dict]
-    ) -> str:
+    ) -> tuple[str, list[int]]:
         """
-        Send a message in meal planning context.
+        Send a message in meal planning context with tool calling.
 
         Args:
             message: User's message
@@ -105,7 +125,7 @@ AVAILABLE RECIPES:
             history: List of previous messages
 
         Returns:
-            Claude's response text
+            Tuple of (response_text, list of recipe_ids to add)
         """
         messages = history + [{"role": "user", "content": message}]
 
@@ -113,7 +133,18 @@ AVAILABLE RECIPES:
             model=self.model,
             max_tokens=1000,
             system=self.PLANNING_SYSTEM_PROMPT.format(recipe_list=recipe_list),
-            messages=messages
+            messages=messages,
+            tools=self.PLANNING_TOOLS
         )
 
-        return response.content[0].text
+        # Extract text response and tool calls
+        response_text = ""
+        recipe_ids_to_add = []
+
+        for block in response.content:
+            if block.type == "text":
+                response_text = block.text
+            elif block.type == "tool_use" and block.name == "add_recipes_to_plan":
+                recipe_ids_to_add = block.input.get("recipe_ids", [])
+
+        return response_text, recipe_ids_to_add
