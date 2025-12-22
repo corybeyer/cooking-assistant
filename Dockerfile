@@ -1,3 +1,4 @@
+# Cooking Assistant - Streamlit Application
 FROM python:3.12-slim-bookworm
 
 # Install ODBC driver for SQL Server
