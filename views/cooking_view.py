@@ -9,7 +9,7 @@ import streamlit as st
 
 from controllers.cooking_controller import CookingController
 from views.components.chat import render_chat_messages
-from views.components.audio import render_mic_button, render_audio_playback
+from views.components.voice_panel import render_voice_panel
 from views.components.sidebar import render_cooking_sidebar
 
 
@@ -61,32 +61,38 @@ class CookingView:
 
     def _render_cooking_session(self):
         """Render active cooking session."""
-        # Sidebar
+        # Sidebar (without voice settings)
         render_cooking_sidebar(
             recipe_name=self.controller.get_recipe_name(),
-            accents=self.controller.get_available_accents(),
-            current_accent=self.controller.get_voice_accent(),
-            on_accent_change=self.controller.set_voice_accent,
             on_text_submit=self.controller.send_message,
             on_end_session=self.controller.end_session,
         )
 
-        # Main chat area
-        self._render_chat_area()
+        # Two-column layout: Chat on left, Voice Panel on right
+        chat_col, voice_col = st.columns([3, 1])
+
+        with chat_col:
+            self._render_chat_area()
+
+        with voice_col:
+            self._render_voice_panel()
 
     def _render_chat_area(self):
-        """Render main chat area with messages and voice input."""
+        """Render main chat area with messages."""
         st.markdown("### Chat")
 
-        # Display chat messages
+        # Display chat messages in scrollable container
         render_chat_messages(self.controller.get_messages())
 
-        # Play any pending audio
-        pending_audio = self.controller.get_pending_audio()
-        render_audio_playback(pending_audio)
-
-        # Voice input button
-        audio_bytes = render_mic_button(self.controller.get_audio_key())
+    def _render_voice_panel(self):
+        """Render voice control panel."""
+        audio_bytes = render_voice_panel(
+            audio_key=self.controller.get_audio_key(),
+            pending_audio=self.controller.get_pending_audio(),
+            accents=self.controller.get_available_accents(),
+            current_accent=self.controller.get_voice_accent(),
+            on_accent_change=self.controller.set_voice_accent,
+        )
 
         if audio_bytes:
             with st.spinner("Transcribing..."):
