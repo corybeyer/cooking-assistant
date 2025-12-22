@@ -61,6 +61,72 @@ CREATE TABLE Steps (
 );
 
 -- ============================================
+-- SHOPPING LIST TABLES
+-- ============================================
+
+-- ShoppingLists: Shopping list for meal planning
+CREATE TABLE ShoppingLists (
+    ShoppingListId INT IDENTITY(1,1) PRIMARY KEY,
+    Name NVARCHAR(200) NULL,
+    CreatedDate DATETIME NOT NULL DEFAULT(GETDATE()),
+    Status NVARCHAR(50) NOT NULL DEFAULT 'active'  -- active, completed, archived
+);
+
+-- ShoppingListRecipes: Links shopping lists to recipes with planning details
+CREATE TABLE ShoppingListRecipes (
+    ShoppingListRecipeId INT IDENTITY(1,1) PRIMARY KEY,
+    ShoppingListId INT NOT NULL,
+    RecipeId INT NOT NULL,
+    Servings INT NULL,
+    PlannedDate DATE NULL,
+    MealType NVARCHAR(50) NULL,  -- breakfast, lunch, dinner, snack
+    CONSTRAINT FK_ShoppingListRecipes_ShoppingLists
+        FOREIGN KEY (ShoppingListId) REFERENCES ShoppingLists(ShoppingListId) ON DELETE CASCADE,
+    CONSTRAINT FK_ShoppingListRecipes_Recipes
+        FOREIGN KEY (RecipeId) REFERENCES Recipes(RecipeId)
+);
+
+-- ShoppingListItems: Aggregated ingredients in a shopping list
+CREATE TABLE ShoppingListItems (
+    ShoppingListItemId INT IDENTITY(1,1) PRIMARY KEY,
+    ShoppingListId INT NOT NULL,
+    IngredientId INT NOT NULL,
+    AggregatedQuantity NVARCHAR(100) NULL,
+    Category NVARCHAR(50) NULL,  -- produce, meat, dairy, pantry
+    IsChecked BIT NOT NULL DEFAULT 0,
+    SortOrder INT NULL,
+    CONSTRAINT FK_ShoppingListItems_ShoppingLists
+        FOREIGN KEY (ShoppingListId) REFERENCES ShoppingLists(ShoppingListId) ON DELETE CASCADE,
+    CONSTRAINT FK_ShoppingListItems_Ingredients
+        FOREIGN KEY (IngredientId) REFERENCES Ingredients(IngredientId)
+);
+
+-- ShoppingListLinks: Shareable links for shopping lists
+CREATE TABLE ShoppingListLinks (
+    LinkId INT IDENTITY(1,1) PRIMARY KEY,
+    ShoppingListId INT NOT NULL,
+    LinkCode NVARCHAR(20) NOT NULL UNIQUE,
+    CreatedDate DATETIME NOT NULL DEFAULT(GETDATE()),
+    ExpiresDate DATETIME NULL,
+    CONSTRAINT FK_ShoppingListLinks_ShoppingLists
+        FOREIGN KEY (ShoppingListId) REFERENCES ShoppingLists(ShoppingListId) ON DELETE CASCADE
+);
+
+-- GroceryPrices: Cached price data from grocery store APIs
+CREATE TABLE GroceryPrices (
+    GroceryPriceId INT IDENTITY(1,1) PRIMARY KEY,
+    IngredientId INT NOT NULL,
+    StoreName NVARCHAR(100) NOT NULL,
+    ProductName NVARCHAR(300) NULL,
+    ProductId NVARCHAR(100) NULL,
+    Price DECIMAL(10, 2) NULL,
+    Unit NVARCHAR(50) NULL,
+    LastUpdated DATETIME NOT NULL DEFAULT(GETDATE()),
+    CONSTRAINT FK_GroceryPrices_Ingredients
+        FOREIGN KEY (IngredientId) REFERENCES Ingredients(IngredientId)
+);
+
+-- ============================================
 -- INDEXES
 -- ============================================
 
@@ -82,6 +148,18 @@ ON Recipes(Category);
 
 CREATE INDEX IX_Recipes_Cuisine
 ON Recipes(Cuisine);
+
+-- Optimize shopping list queries by status
+CREATE INDEX IX_ShoppingLists_Status
+ON ShoppingLists(Status);
+
+-- Optimize shopping list item lookups
+CREATE INDEX IX_ShoppingListItems_ShoppingListId
+ON ShoppingListItems(ShoppingListId);
+
+-- Optimize shareable link lookups
+CREATE INDEX IX_ShoppingListLinks_LinkCode
+ON ShoppingListLinks(LinkCode);
 
 -- ============================================
 -- USER-DEFINED TABLE TYPES
