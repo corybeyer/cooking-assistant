@@ -23,10 +23,12 @@ class CookingView:
         """Main render method - displays appropriate UI based on state."""
         st.title("Cooking Assistant")
 
-        if not self.controller.is_session_active():
-            self._render_recipe_selection()
-        else:
+        if self.controller.is_session_active():
             self._render_cooking_session()
+        elif self.controller.is_discovery_mode():
+            self._render_discovery_chat()
+        else:
+            self._render_recipe_selection()
 
     def _render_recipe_selection(self):
         """Render recipe selection screen."""
@@ -58,6 +60,27 @@ class CookingView:
                     st.rerun()
                 else:
                     st.error("Failed to start cooking session.")
+
+    def _render_discovery_chat(self):
+        """Render the chat-first discovery interface."""
+        # Initialize discovery with greeting if needed
+        self.controller.init_discovery()
+
+        st.markdown("### Let's find something to cook!")
+
+        # Display discovery chat messages
+        messages = self.controller.get_discovery_messages()
+        render_chat_messages(messages)
+
+        # Chat input
+        if prompt := st.chat_input("What would you like to cook?"):
+            with st.spinner("Thinking..."):
+                success, error = self.controller.send_discovery_message(prompt)
+
+            if success:
+                st.rerun()
+            elif error:
+                st.error(error)
 
     def _render_cooking_session(self):
         """Render active cooking session."""

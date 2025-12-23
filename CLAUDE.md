@@ -12,7 +12,7 @@ This is a **Streamlit application** following the **MVC (Model-View-Controller)*
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  pages/ & streamlit_app.py (Routes - thin entry points)     │
+│  pages/ & Home_Page.py (Routes - thin entry points)         │
 │                          │                                  │
 │                          ▼                                  │
 │  ┌─────────────────────────────────────────────────────┐   │
@@ -51,7 +51,7 @@ This is a **Streamlit application** following the **MVC (Model-View-Controller)*
 
 ```
 cooking-assistant/
-├── streamlit_app.py              # Entry point (delegates to HomeView)
+├── Home_Page.py                  # Entry point (delegates to HomeView)
 │
 ├── models/                       # Data layer - entities and repositories
 │   ├── __init__.py               # Exports all models
@@ -195,7 +195,7 @@ export DEV_USER_EMAIL='test@example.com'
 pip install -r requirements.txt
 
 # Run locally
-streamlit run streamlit_app.py
+streamlit run Home_Page.py
 
 # Run with Docker
 docker build -t cooking-assistant .
@@ -266,7 +266,7 @@ export DEV_USER_NAME='Your Name'
 export DEV_USER_EMAIL='you@example.com'
 
 # Then run the app
-streamlit run streamlit_app.py
+streamlit run Home_Page.py
 ```
 
 ### Database Migration
