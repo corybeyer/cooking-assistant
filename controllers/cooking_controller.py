@@ -127,6 +127,17 @@ class CookingController:
         st.session_state.request_timestamps.append(now)
         return True
 
+    def _generate_response_audio(self, text: str):
+        """Generate TTS audio for a response and set it as pending."""
+        state = st.session_state.cooking
+        audio_bytes = self.audio.text_to_speech(
+            text,
+            voice=state.get("voice_name", DEFAULT_VOICE_NAME),
+            rate=state.get("voice_rate", DEFAULT_VOICE_RATE)
+        )
+        if audio_bytes:
+            state["pending_audio"] = audio_bytes
+
     # Session state accessors
     def is_session_active(self) -> bool:
         """Check if a cooking session is active."""
@@ -254,13 +265,7 @@ class CookingController:
         state["discovery_messages"].append({"role": "assistant", "content": response_text})
 
         # Generate TTS audio for the response
-        audio_bytes = self.audio.text_to_speech(
-            response_text,
-            voice=state.get("voice_name", DEFAULT_VOICE_NAME),
-            rate=state.get("voice_rate", DEFAULT_VOICE_RATE)
-        )
-        if audio_bytes:
-            state["pending_audio"] = audio_bytes
+        self._generate_response_audio(response_text)
 
         # If Claude selected a recipe, start the cooking session
         if selected_recipe_id:
@@ -371,13 +376,7 @@ class CookingController:
         state["messages"].append({"role": "user", "content": text})
         state["messages"].append({"role": "assistant", "content": response})
 
-        # Generate TTS audio with voice preferences
-        audio_bytes = self.audio.text_to_speech(
-            response,
-            voice=state.get("voice_name", DEFAULT_VOICE_NAME),
-            rate=state.get("voice_rate", DEFAULT_VOICE_RATE)
-        )
-        if audio_bytes:
-            state["pending_audio"] = audio_bytes
+        # Generate TTS audio for the response
+        self._generate_response_audio(response)
 
         return True, None
