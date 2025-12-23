@@ -28,29 +28,69 @@ A conversational AI that knows your recipe and can read steps aloud, answer ques
 | **AI** | Claude API (Anthropic) | Best-in-class conversation |
 | **Voice Input** | SpeechRecognition (Google) | Free, no API key needed |
 | **Voice Output** | gTTS (Google Text-to-Speech) | Free, British accent for friendly guidance |
+| **Notifications** | Azure Communication Services | SMS delivery for shopping lists |
+| **Grocery APIs** | Kroger API | Price comparison and product matching |
 | **Hosting** | Azure Container Apps | Scales to zero, Docker-based |
 | **Auth** | Azure Easy Auth (Entra ID) | Managed authentication layer |
 | **IaC** | Azure Bicep | Reproducible, modular infrastructure |
 
 ## Project Structure
 
+The application follows an **MVC (Model-View-Controller)** architecture:
+
 ```
 cooking-assistant/
-├── streamlit_app.py          # Main application (UI + all logic)
-├── app/
-│   ├── config.py             # Pydantic settings management
-│   ├── database.py           # SQLAlchemy connection
-│   └── models/
-│       ├── __init__.py       # Model exports
-│       └── entities.py       # ORM models (Recipe, Ingredient, Step, etc.)
+├── Home_Page.py                  # Entry point (delegates to HomeView)
+│
+├── pages/                        # Streamlit multi-page routing (thin)
+│   ├── 1_🍳_Cook.py
+│   ├── 2_📋_Plan_Meals.py
+│   └── 3_🛒_Shopping_List.py
+│
+├── views/                        # View layer - UI presentation
+│   ├── home_view.py
+│   ├── cooking_view.py
+│   ├── planning_view.py
+│   ├── shopping_view.py
+│   └── components/               # Reusable UI components
+│       ├── audio.py
+│       ├── chat.py
+│       ├── sidebar/
+│       └── share/
+│
+├── controllers/                  # Controller layer - orchestration
+│   ├── cooking_controller.py
+│   ├── planning_controller.py
+│   └── shopping_controller.py
+│
+├── services/                     # Business logic layer
+│   ├── claude_service.py         # Claude API interactions
+│   ├── recipe_service.py         # Recipe data access
+│   ├── audio_service.py          # Voice I/O
+│   ├── shopping_list_service.py  # Ingredient aggregation
+│   ├── notification_service.py   # SMS/Email via Azure
+│   └── grocery_apis/             # Price comparison integrations
+│       ├── base.py
+│       └── kroger.py
+│
+├── models/                       # Data layer - entities and repositories
+│   ├── entities.py               # SQLAlchemy ORM models
+│   └── repositories/
+│       └── shopping_list_repository.py
+│
+├── config/                       # Configuration
+│   ├── settings.py               # Pydantic settings
+│   ├── database.py               # SQLAlchemy connection
+│   └── auth.py                   # Azure Entra ID authentication
+│
 ├── infrastructure/
-│   ├── schema.sql            # Database DDL + stored procedures
-│   └── bicep/                # Infrastructure as Code (Azure)
-│       ├── main.bicep        # Main orchestration template
-│       ├── modules/          # Modular resource definitions
-│       └── parameters/       # Environment-specific params
+│   ├── schema.sql                # Database DDL
+│   └── bicep/                    # Infrastructure as Code (Azure)
+│       ├── main.bicep
+│       ├── modules/
+│       └── parameters/
 ├── .github/workflows/
-│   └── deploy.yml            # CI/CD pipeline
+│   └── deploy.yml                # CI/CD pipeline
 ├── requirements.txt
 ├── Dockerfile
 └── .env.example
@@ -58,24 +98,33 @@ cooking-assistant/
 
 ## Application Flow
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    streamlit_app.py                         │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  UI Layer (Streamlit)                               │   │
-│  │  - Recipe selection dropdown                        │   │
-│  │  - Voice input (st.audio_input)                     │   │
-│  │  - Chat interface                                   │   │
-│  │  - Audio playback (st.audio)                        │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                          │                                  │
-│           ┌──────────────┼──────────────┐                  │
-│           ▼              ▼              ▼                  │
-│    ┌───────────┐  ┌───────────┐  ┌───────────────┐        │
-│    │ SQLAlchemy│  │ Anthropic │  │ gTTS/SpeechRec│        │
-│    │ (Database)│  │ (Claude)  │  │ (Voice I/O)   │        │
-│    └───────────┘  └───────────┘  └───────────────┘        │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Routes["pages/ & Home_Page.py (Routes)"]
+        R[Thin entry points]
+    end
+
+    subgraph Views["views/ (View Layer)"]
+        V1[UI components and rendering]
+        V2[Streamlit widgets]
+    end
+
+    subgraph Controllers["controllers/ (Controller Layer)"]
+        C1[Session state management]
+        C2[Orchestrates views and services]
+    end
+
+    subgraph Foundation["Foundation Layer"]
+        M["models/<br/>(Data)"]
+        S["services/<br/>(Business Logic)"]
+        CF["config/<br/>(Settings)"]
+    end
+
+    Routes --> Views
+    Views --> Controllers
+    Controllers --> M
+    Controllers --> S
+    Controllers --> CF
 ```
 
 **Cooking Phases:**
@@ -86,27 +135,48 @@ cooking-assistant/
 
 ## Database Schema
 
-```
-┌─────────────────┐       ┌─────────────────────┐       ┌─────────────────┐
-│     Recipes     │       │  RecipeIngredients  │       │   Ingredients   │
-├─────────────────┤       ├─────────────────────┤       ├─────────────────┤
-│ RecipeId (PK)   │──┐    │ RecipeIngredientId  │    ┌──│ IngredientId    │
-│ Name            │  │    │ RecipeId (FK)       │────┘  │ Name            │
-│ Description     │  └───>│ IngredientId (FK)   │───────│                 │
-│ Cuisine         │       │ UnitId (FK)         │───┐   └─────────────────┘
-│ PrepTime        │       │ Quantity            │   │
-│ CookTime        │       │ OrderIndex          │   │   ┌─────────────────┐
-│ Servings        │       └─────────────────────┘   │   │ UnitsOfMeasure  │
-└─────────────────┘                                 │   ├─────────────────┤
-        │                                           └──>│ UnitId          │
-        │         ┌─────────────────┐                   │ UnitName        │
-        │         │      Steps      │                   └─────────────────┘
-        │         ├─────────────────┤
-        └────────>│ StepId          │
-                  │ RecipeId (FK)   │
-                  │ Description     │
-                  │ OrderIndex      │
-                  └─────────────────┘
+```mermaid
+erDiagram
+    Recipes {
+        int RecipeId PK
+        string Name
+        string Description
+        string Cuisine
+        int PrepTime
+        int CookTime
+        int Servings
+    }
+
+    Ingredients {
+        int IngredientId PK
+        string Name
+    }
+
+    UnitsOfMeasure {
+        int UnitId PK
+        string UnitName
+    }
+
+    RecipeIngredients {
+        int RecipeIngredientId PK
+        int RecipeId FK
+        int IngredientId FK
+        int UnitId FK
+        string Quantity
+        int OrderIndex
+    }
+
+    Steps {
+        int StepId PK
+        int RecipeId FK
+        string Description
+        int OrderIndex
+    }
+
+    Recipes ||--o{ RecipeIngredients : has
+    Recipes ||--o{ Steps : has
+    Ingredients ||--o{ RecipeIngredients : "used in"
+    UnitsOfMeasure ||--o{ RecipeIngredients : "measured by"
 ```
 
 - **Normalized** — Ingredients and units stored once, referenced by many recipes
@@ -140,7 +210,7 @@ cp .env.example .env
 # Edit .env with your credentials
 
 # Run the app
-streamlit run streamlit_app.py
+streamlit run Home_Page.py
 ```
 
 Open http://localhost:8501 in your browser.
@@ -220,8 +290,15 @@ az containerapp update \
 - [x] GitHub Actions CI/CD
 - [x] Rate limiting and auth
 - [x] Infrastructure as Code (Bicep)
+- [x] MVC architecture refactor
+- [x] Meal planning with Claude conversation
+- [x] Shopping list generation with ingredient aggregation
+- [x] SMS delivery via Azure Communication Services
+- [x] Shareable shopping list links
+- [x] Multi-user support with Azure Entra ID
+- [x] Kroger API integration for price comparison
 - [ ] Recipe parsing from URLs
-- [ ] Session persistence (Redis for multi-instance)
+- [ ] Additional grocery store integrations (Walmart, Instacart)
 
 ## License
 

@@ -10,31 +10,33 @@ This file provides context for Claude Code to understand and work with this proj
 
 This is a **Streamlit application** following the **MVC (Model-View-Controller)** pattern:
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  pages/ & Home_Page.py (Routes - thin entry points)         │
-│                          │                                  │
-│                          ▼                                  │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  views/ (View Layer)                                │   │
-│  │  - UI components and rendering                       │   │
-│  │  - Streamlit widgets                                 │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                          │                                  │
-│                          ▼                                  │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  controllers/ (Controller Layer)                    │   │
-│  │  - Session state management                          │   │
-│  │  - Orchestrates views and services                   │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                          │                                  │
-│           ┌──────────────┼──────────────┐                  │
-│           ▼              ▼              ▼                  │
-│  ┌─────────────┐  ┌───────────┐  ┌───────────────┐        │
-│  │  models/    │  │ services/ │  │ config/       │        │
-│  │  (Data)     │  │ (Business)│  │ (Settings)    │        │
-│  └─────────────┘  └───────────┘  └───────────────┘        │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Routes["pages/ & Home_Page.py (Routes)"]
+        R[Thin entry points]
+    end
+
+    subgraph Views["views/ (View Layer)"]
+        V1[UI components and rendering]
+        V2[Streamlit widgets]
+    end
+
+    subgraph Controllers["controllers/ (Controller Layer)"]
+        C1[Session state management]
+        C2[Orchestrates views and services]
+    end
+
+    subgraph Foundation["Foundation Layer"]
+        M["models/<br/>(Data)"]
+        S["services/<br/>(Business Logic)"]
+        CF["config/<br/>(Settings)"]
+    end
+
+    Routes --> Views
+    Views --> Controllers
+    Controllers --> M
+    Controllers --> S
+    Controllers --> CF
 ```
 
 ## Tech Stack
