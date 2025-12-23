@@ -9,9 +9,12 @@ consolidated shopping list, handling:
 - Smart aggregation via Claude for complex cases
 """
 
+import logging
 from dataclasses import dataclass
 from typing import Optional
 from collections import defaultdict
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy.orm import Session, joinedload
 
@@ -255,8 +258,9 @@ Response:"""
                 messages=[{"role": "user", "content": prompt}]
             )
             return response.content[0].text.strip()
-        except Exception:
+        except Exception as e:
             # Fallback to simple aggregation
+            logger.warning(f"Claude API failed for quantity aggregation, using fallback: {e}")
             return self.aggregate_quantities(quantities)
 
     def generate_shopping_list(
