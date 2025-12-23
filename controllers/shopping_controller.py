@@ -528,7 +528,7 @@ class ShoppingController:
 
             # Get ingredient name and quantity
             ingredient_name = item.ingredient.Name if item.ingredient else "Unknown"
-            quantity = item.Quantity or ""
+            quantity = item.AggregatedQuantity or ""
 
             # Check for Kroger product selection or best match
             selected_product = self.get_selected_product(item.ShoppingListItemId)
