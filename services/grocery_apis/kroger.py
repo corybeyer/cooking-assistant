@@ -36,6 +36,7 @@ class KrogerAPI(GroceryAPIBase):
         self.settings = get_settings()
         self._access_token: Optional[str] = None
         self._token_expires_at: float = 0
+        self._last_auth_error: Optional[str] = None
 
     @property
     def store_name(self) -> str:
@@ -54,12 +55,16 @@ class KrogerAPI(GroceryAPIBase):
 
         Uses OAuth2 Client Credentials flow.
         """
+        # Clear any previous auth error
+        self._last_auth_error = None
+
         # Return cached token if still valid (with 60s buffer)
         if self._access_token and time.time() < (self._token_expires_at - 60):
             return self._access_token
 
         if not self.is_configured():
-            logger.error("Kroger API credentials not configured")
+            self._last_auth_error = "Kroger API credentials not configured"
+            logger.error(self._last_auth_error)
             return None
 
         try:
@@ -95,9 +100,25 @@ class KrogerAPI(GroceryAPIBase):
             return self._access_token
 
         except httpx.HTTPStatusError as e:
-            logger.error(f"Kroger auth failed: {e.response.status_code} - {e.response.text}")
+            status = e.response.status_code
+            if status == 401:
+                self._last_auth_error = "Invalid Kroger API credentials. Check your KROGER_CLIENT_ID and KROGER_CLIENT_SECRET."
+            elif status == 400:
+                self._last_auth_error = "Bad request to Kroger API. The credentials may be malformed."
+            else:
+                self._last_auth_error = f"Kroger API error (HTTP {status})"
+            logger.error(f"Kroger auth failed: {status} - {e.response.text}")
+            return None
+        except httpx.ConnectError:
+            self._last_auth_error = "Could not connect to Kroger API. Check your network connection."
+            logger.error(self._last_auth_error)
+            return None
+        except httpx.TimeoutException:
+            self._last_auth_error = "Kroger API request timed out. Please try again."
+            logger.error(self._last_auth_error)
             return None
         except Exception as e:
+            self._last_auth_error = f"Kroger authentication error: {str(e)}"
             logger.error(f"Kroger auth error: {e}")
             return None
 
@@ -130,7 +151,7 @@ class KrogerAPI(GroceryAPIBase):
                 success=False,
                 ingredient_name=ingredient,
                 products=[],
-                error="Failed to authenticate with Kroger API"
+                error=self._last_auth_error or "Failed to authenticate with Kroger API"
             )
 
         try:
