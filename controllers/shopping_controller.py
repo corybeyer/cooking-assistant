@@ -20,7 +20,7 @@ from config.database import SessionLocal
 from config.auth import get_current_user, require_auth, UserContext
 from models import ShoppingList, ShoppingListItem
 from models.repositories import ShoppingListRepository
-from services.notification_service import NotificationService, SMSResult, EmailResult
+from services.notification_service import NotificationService, SMSResult, EmailResult, EmailItemDetail
 from services.grocery_apis import KrogerAPI, PriceResult, ProductMatch
 
 
@@ -476,7 +476,7 @@ class ShoppingController:
         return issues
 
     def send_list_via_email(self, list_id: int, email: str) -> EmailResult:
-        """Send shopping list to an email address."""
+        """Send shopping list to an email address, including Kroger data if available."""
         # Get or create link code
         link_code = self.generate_link(list_id)
         share_url = self.get_shareable_url(link_code)
@@ -487,7 +487,10 @@ class ShoppingController:
             return EmailResult(success=False, error="Shopping list not found")
 
         list_name = shopping_list.Name or "Shopping List"
-        item_count = len(shopping_list.items) if shopping_list.items else 0
+
+        # Build item details with Kroger selections (excluding removed items)
+        email_items = self._build_email_items(list_id, shopping_list)
+        item_count = len(email_items) if email_items else (len(shopping_list.items) if shopping_list.items else 0)
 
         # Send Email
         notification = NotificationService()
@@ -495,8 +498,64 @@ class ShoppingController:
             to_email=email,
             list_name=list_name,
             item_count=item_count,
-            share_url=share_url
+            share_url=share_url,
+            items=email_items if email_items else None
         )
+
+    def _build_email_items(self, list_id: int, shopping_list: ShoppingList) -> list[EmailItemDetail]:
+        """
+        Build list of EmailItemDetail from shopping list items with Kroger selections.
+
+        Excludes removed items and includes user's product selections where available.
+        """
+        if not shopping_list.items:
+            return []
+
+        email_items = []
+        removed_items = self.get_removed_items(list_id)
+        cached_prices = self.get_cached_prices(list_id)
+
+        # Build a lookup from item_id to price info
+        price_info_lookup = {}
+        if cached_prices and cached_prices.success:
+            for item_info in cached_prices.items:
+                price_info_lookup[item_info.item_id] = item_info
+
+        for item in shopping_list.items:
+            # Skip removed items
+            if item.ShoppingListItemId in removed_items:
+                continue
+
+            # Get ingredient name and quantity
+            ingredient_name = item.ingredient.Name if item.ingredient else "Unknown"
+            quantity = item.Quantity or ""
+
+            # Check for Kroger product selection or best match
+            selected_product = self.get_selected_product(item.ShoppingListItemId)
+            price_info = price_info_lookup.get(item.ShoppingListItemId)
+
+            # Determine which product to use (selection > best match)
+            product = selected_product
+            if not product and price_info and price_info.best_match:
+                product = price_info.best_match
+
+            if product:
+                email_items.append(EmailItemDetail(
+                    ingredient_name=ingredient_name,
+                    quantity=quantity,
+                    product_name=product.product_name,
+                    price=product.price,
+                    size=product.size,
+                    product_url=product.product_url
+                ))
+            else:
+                # No Kroger data available for this item
+                email_items.append(EmailItemDetail(
+                    ingredient_name=ingredient_name,
+                    quantity=quantity
+                ))
+
+        return email_items
 
     def validate_email(self, email: str) -> tuple[bool, str]:
         """Validate an email address. Returns (is_valid, message)."""
