@@ -2,17 +2,22 @@
 Shopping View - UI for viewing and managing shopping lists.
 
 This view handles:
-- Displaying shopping lists
-- Checking off items
+- Displaying shopping lists with integrated Kroger pricing
+- Checking off items while shopping
+- Removing items already in the house
+- Selecting alternative products
 - Sharing lists via link
-- Price comparison via Kroger API
 """
 
 import streamlit as st
 
 from controllers.shopping_controller import ShoppingController, PriceComparisonResult
 from views.components.sidebar import render_shopping_list_sidebar
-from views.components.shopping_item import render_shopping_items_grouped
+from views.components.shopping_item import (
+    render_shopping_table_header,
+    render_category_section,
+    render_removed_section,
+)
 from views.components.shopping_stats import render_shopping_stats
 from views.components.share import render_email_share, render_link_share
 
@@ -61,7 +66,7 @@ class ShoppingView:
             st.markdown("Or create a new one in **Plan Meals**")
 
     def _render_shopping_list(self, list_id: int):
-        """Render a shopping list with checkable items."""
+        """Render a shopping list with unified pricing table."""
         shopping_list = self.controller.get_list(list_id)
 
         if not shopping_list:
@@ -71,126 +76,130 @@ class ShoppingView:
         # Header
         st.markdown(f"### {shopping_list.Name or 'Shopping List'}")
 
-        # Stats
         items = shopping_list.items or []
-        total = len(items)
-        checked = sum(1 for i in items if i.IsChecked)
+        removed_items = self.controller.get_removed_items(list_id)
+        active_items = [i for i in items if i.ShoppingListItemId not in removed_items]
 
-        render_shopping_stats(total, checked)
+        # Stats row with pricing
+        self._render_stats_and_pricing(list_id, items, active_items, removed_items)
+
         st.markdown("---")
 
-        # Price comparison section
-        self._render_price_comparison(list_id)
+        # Share section (collapsed)
+        with st.expander("Share List", expanded=False):
+            self._render_share_section(list_id)
+
         st.markdown("---")
 
-        # Share section
-        self._render_share_section(list_id)
-        st.markdown("---")
+        # Table header
+        render_shopping_table_header()
+
+        # Get price info and selected products for rendering
+        cached_prices = self.controller.get_cached_prices(list_id)
+        price_info_map = {}
+        if cached_prices and cached_prices.success:
+            for item_info in cached_prices.items:
+                price_info_map[item_info.item_id] = item_info
+
+        selected_products = st.session_state.shopping.get("selected_products", {})
 
         # Items grouped by category
         grouped = self.controller.get_items_grouped(list_id)
-        render_shopping_items_grouped(grouped, self.controller.check_item)
 
-    def _render_price_comparison(self, list_id: int):
-        """Render the price comparison section."""
-        st.markdown("#### Price Comparison")
+        for category, category_items in grouped.items():
+            render_category_section(
+                category=category,
+                items=category_items,
+                price_info_map=price_info_map,
+                selected_products=selected_products,
+                removed_items=removed_items,
+                on_check_change=self.controller.check_item,
+                on_remove=lambda item_id: self.controller.remove_item(list_id, item_id),
+                on_product_select=self.controller.set_selected_product,
+            )
 
-        # Check if Kroger is configured
-        if not self.controller.is_kroger_configured():
-            issues = self.controller.get_kroger_config_issues()
-            st.warning("Kroger price comparison is not configured.")
-            if issues:
-                with st.expander("Configuration needed"):
+        # Removed items section at bottom
+        render_removed_section(
+            all_items=items,
+            removed_items=removed_items,
+            on_restore=lambda item_id: self.controller.restore_item(list_id, item_id),
+        )
+
+    def _render_stats_and_pricing(
+        self,
+        list_id: int,
+        all_items: list,
+        active_items: list,
+        removed_items: set,
+    ):
+        """Render stats row with integrated pricing controls."""
+        total_active = len(active_items)
+        checked = sum(1 for i in active_items if i.IsChecked)
+        removed_count = len(removed_items)
+
+        # Get cached prices
+        cached_prices = self.controller.get_cached_prices(list_id)
+        has_prices = cached_prices and cached_prices.success
+
+        # Layout: stats | price button/total
+        col_stats, col_pricing = st.columns([2, 1])
+
+        with col_stats:
+            stat_col1, stat_col2, stat_col3 = st.columns(3)
+            with stat_col1:
+                st.metric("Items", total_active)
+            with stat_col2:
+                st.metric("Got", checked)
+            with stat_col3:
+                if removed_count > 0:
+                    st.metric("Removed", removed_count)
+                else:
+                    st.metric("Remaining", total_active - checked)
+
+            # Progress bar
+            if total_active > 0:
+                st.progress(checked / total_active)
+
+        with col_pricing:
+            if not self.controller.is_kroger_configured():
+                st.caption("Kroger not configured")
+                with st.popover("Setup"):
+                    issues = self.controller.get_kroger_config_issues()
                     for issue in issues:
                         st.markdown(f"- {issue}")
-            return
+            elif has_prices:
+                # Show effective total
+                effective_total = self.controller.get_effective_total(list_id)
+                items_priced = cached_prices.items_with_prices
+                items_not_found = cached_prices.items_without_prices
 
-        # Initialize session state for price results
-        if "price_results" not in st.session_state:
-            st.session_state.price_results = {}
+                st.metric("Estimated Total", f"${effective_total:.2f}")
 
-        # Check if we have cached results for this list
-        cached_result = st.session_state.price_results.get(list_id)
+                if items_not_found > 0:
+                    st.caption(f"{items_priced} priced, {items_not_found} not found")
+                else:
+                    st.caption(f"All {items_priced} items priced")
 
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            if st.button("Get Kroger Prices", type="primary", use_container_width=True):
-                with st.spinner("Fetching prices from Kroger..."):
-                    result = self.controller.get_prices_for_list(list_id)
-                    st.session_state.price_results[list_id] = result
-                    st.rerun()
+                if st.button("Refresh Prices", use_container_width=True):
+                    self._fetch_prices(list_id)
+            else:
+                # Show fetch button
+                if st.button(
+                    "Get Kroger Prices",
+                    type="primary",
+                    use_container_width=True
+                ):
+                    self._fetch_prices(list_id)
 
-        with col2:
-            if cached_result:
-                if st.button("Clear", use_container_width=True):
-                    del st.session_state.price_results[list_id]
-                    st.rerun()
-
-        # Display results if available
-        if cached_result:
-            self._render_price_results(cached_result)
-
-    def _render_price_results(self, result: PriceComparisonResult):
-        """Render the price comparison results."""
-        if not result.success:
-            st.error(f"Failed to fetch prices: {result.error}")
-            return
-
-        # Summary metrics
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Estimated Total", f"${result.total_estimated:.2f}")
-        with col2:
-            st.metric("Items Priced", f"{result.items_with_prices}")
-        with col3:
-            st.metric("Not Found", f"{result.items_without_prices}")
-
-        if result.items_without_prices > 0:
-            st.caption("Some items couldn't be matched. Total may be higher.")
-
-        # Item-by-item breakdown
-        with st.expander("View Price Details", expanded=False):
-            for item_info in result.items:
-                col1, col2, col3 = st.columns([3, 2, 1])
-
-                with col1:
-                    st.markdown(f"**{item_info.ingredient_name}**")
-                    if item_info.quantity:
-                        st.caption(item_info.quantity)
-
-                with col2:
-                    if item_info.best_match:
-                        st.markdown(f"{item_info.best_match.product_name}")
-                        if item_info.best_match.size:
-                            st.caption(item_info.best_match.size)
-                    else:
-                        st.caption(item_info.error or "Not found")
-
-                with col3:
-                    if item_info.best_match:
-                        st.markdown(f"**${item_info.best_match.price:.2f}**")
-                        st.caption(item_info.best_match.unit)
-                    else:
-                        st.markdown("--")
-
-                # Show alternative products in a nested expander
-                if len(item_info.all_matches) > 1:
-                    with st.expander(f"See {len(item_info.all_matches) - 1} alternatives"):
-                        for alt in item_info.all_matches[1:]:
-                            alt_col1, alt_col2 = st.columns([3, 1])
-                            with alt_col1:
-                                st.markdown(f"{alt.product_name}")
-                                if alt.size:
-                                    st.caption(alt.size)
-                            with alt_col2:
-                                st.markdown(f"${alt.price:.2f}")
-
-                st.divider()
+    def _fetch_prices(self, list_id: int):
+        """Fetch prices from Kroger API."""
+        with st.spinner("Fetching prices from Kroger..."):
+            result = self.controller.get_prices_for_list(list_id)
+            self.controller.set_cached_prices(list_id, result)
+            st.rerun()
 
     def _render_share_section(self, list_id: int):
         """Render the share/send section."""
-        st.markdown("#### Share List")
-
         tab1, tab2 = st.tabs(["Send via Email", "Copy Link"])
 
         with tab1:
@@ -236,9 +245,39 @@ class ShoppingView:
         st.progress(checked / total if total > 0 else 0)
         st.markdown("---")
 
-        # Items grouped by category
+        # For shared lists, use simple grouped view (no pricing)
         grouped_items = self._group_items_by_category(items)
-        render_shopping_items_grouped(grouped_items, self.controller.check_item)
+
+        for category, category_items in grouped_items.items():
+            st.markdown(f"#### {category}")
+            for item in category_items:
+                self._render_simple_item(item)
+            st.markdown("")
+
+    def _render_simple_item(self, item):
+        """Render a simple item row for shared lists."""
+        ingredient_name = item.ingredient.Name if item.ingredient else "Unknown"
+        quantity = item.AggregatedQuantity or ""
+
+        col1, col2 = st.columns([1, 5])
+
+        with col1:
+            checked = st.checkbox(
+                "checked",
+                value=item.IsChecked,
+                key=f"shared_item_{item.ShoppingListItemId}",
+                label_visibility="collapsed"
+            )
+
+            if checked != item.IsChecked:
+                self.controller.check_item(item.ShoppingListItemId, checked)
+                st.rerun()
+
+        with col2:
+            if item.IsChecked:
+                st.markdown(f"~~{ingredient_name}~~ {quantity}")
+            else:
+                st.markdown(f"**{ingredient_name}** {quantity}")
 
     def _group_items_by_category(self, items) -> dict:
         """Group items by category with proper ordering."""
