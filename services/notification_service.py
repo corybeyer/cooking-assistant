@@ -161,6 +161,11 @@ class NotificationService:
             )
 
             # Check response
+            if not response:
+                return SMSResult(
+                    success=False,
+                    error="SMS service returned empty response"
+                )
             sms_response = response[0]
             if sms_response.successful:
                 return SMSResult(
@@ -205,6 +210,8 @@ class NotificationService:
                 message="Test message from Cooking Assistant 🍳"
             )
 
+            if not response:
+                return SMSResult(success=False, error="SMS service returned empty response")
             sms_response = response[0]
             if sms_response.successful:
                 return SMSResult(success=True, message_id=sms_response.message_id)
