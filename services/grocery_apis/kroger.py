@@ -14,6 +14,7 @@ Endpoints used:
 """
 
 import logging
+import re
 import time
 from typing import Optional
 import base64
@@ -217,6 +218,15 @@ class KrogerAPI(GroceryAPIBase):
                 error=str(e)
             )
 
+    def _make_product_slug(self, description: str) -> str:
+        """Convert product description to URL-friendly slug for Kroger URLs."""
+        # Lowercase and replace non-alphanumeric chars with hyphens
+        slug = description.lower()
+        slug = re.sub(r'[^a-z0-9]+', '-', slug)
+        # Remove leading/trailing hyphens and collapse multiple hyphens
+        slug = re.sub(r'-+', '-', slug).strip('-')
+        return slug
+
     def _parse_product(self, item: dict) -> Optional[ProductMatch]:
         """Parse a product from the Kroger API response."""
         try:
@@ -261,6 +271,10 @@ class KrogerAPI(GroceryAPIBase):
                     if image_url:
                         break
 
+            # Build proper Kroger URL with slug and product ID
+            slug = self._make_product_slug(description)
+            product_url = f"https://www.kroger.com/p/{slug}/{product_id}"
+
             return ProductMatch(
                 store_name=self.store_name,
                 product_id=product_id,
@@ -269,7 +283,7 @@ class KrogerAPI(GroceryAPIBase):
                 unit=unit,
                 size=size,
                 image_url=image_url,
-                product_url=f"https://www.kroger.com/p/{product_id}"
+                product_url=product_url
             )
 
         except Exception as e:
