@@ -2,9 +2,13 @@
 Shopping Controller - manages shopping list view and interactions.
 
 This controller handles:
-- Loading and displaying shopping lists
+- Loading and displaying shopping lists (filtered by authenticated user)
 - Checking/unchecking items
 - Generating shareable links
+
+Multi-user support:
+- Each user only sees their own shopping lists
+- Shared links allow access to specific lists without ownership
 """
 
 import streamlit as st
@@ -13,6 +17,7 @@ from dataclasses import dataclass
 
 from config.settings import get_settings
 from config.database import SessionLocal
+from config.auth import get_current_user, require_auth, UserContext
 from models import ShoppingList, ShoppingListItem
 from models.repositories import ShoppingListRepository
 from services.notification_service import NotificationService, SMSResult, EmailResult
@@ -65,6 +70,7 @@ class ShoppingController:
             st.session_state.shopping = {
                 "current_list_id": None,
                 "link_code": None,
+                "shared_access_list_id": None,  # ID of list accessed via shared link
             }
 
     # ==========================================
@@ -85,15 +91,55 @@ class ShoppingController:
         return st.session_state.shopping["link_code"]
 
     # ==========================================
+    # Authentication Helpers
+    # ==========================================
+
+    def get_current_user(self) -> Optional[UserContext]:
+        """Get the current authenticated user."""
+        return get_current_user()
+
+    def can_access_list(self, list_id: int) -> bool:
+        """
+        Check if current user can access a shopping list.
+
+        Access is granted if:
+        - User owns the list, OR
+        - User accessed via a valid shared link
+        """
+        # Check if accessing via shared link
+        if st.session_state.shopping.get("shared_access_list_id") == list_id:
+            return True
+
+        # Check ownership
+        user = get_current_user()
+        if not user:
+            return False
+
+        db = SessionLocal()
+        try:
+            repo = ShoppingListRepository(db)
+            return repo.is_owner(list_id, user.user_id)
+        finally:
+            db.close()
+
+    # ==========================================
     # List Operations
     # ==========================================
 
     def get_all_lists(self) -> list[ShoppingListSummary]:
-        """Get all active shopping lists."""
+        """
+        Get all active shopping lists for the current user.
+
+        Returns an empty list if user is not authenticated.
+        """
+        user = get_current_user()
+        if not user:
+            return []
+
         db = SessionLocal()
         try:
             repo = ShoppingListRepository(db)
-            lists = repo.get_all_active()
+            lists = repo.get_all_active(user.user_id)
 
             summaries = []
             for sl in lists:
@@ -120,11 +166,20 @@ class ShoppingController:
             db.close()
 
     def get_list_by_link(self, link_code: str) -> Optional[ShoppingList]:
-        """Get a shopping list by shareable link code."""
+        """
+        Get a shopping list by shareable link code.
+
+        This also grants temporary access to the list for the session,
+        allowing unauthenticated users to view shared lists.
+        """
         db = SessionLocal()
         try:
             repo = ShoppingListRepository(db)
-            return repo.get_by_link_code(link_code)
+            shopping_list = repo.get_by_link_code(link_code)
+            if shopping_list:
+                # Grant access to this list for the session
+                st.session_state.shopping["shared_access_list_id"] = shopping_list.ShoppingListId
+            return shopping_list
         finally:
             db.close()
 

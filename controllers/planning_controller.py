@@ -4,8 +4,11 @@ Planning Controller - manages meal planning session flow and state.
 This controller handles:
 - Planning conversation with Claude
 - Recipe selection and confirmation
-- Creating shopping lists from confirmed plans
+- Creating shopping lists from confirmed plans (owned by authenticated user)
 - Voice input/output for hands-free planning
+
+Multi-user support:
+- Shopping lists created from plans are owned by the authenticated user
 """
 
 import streamlit as st
@@ -17,6 +20,7 @@ from services.recipe_service import RecipeService, RecipeSummary
 from services.shopping_list_service import ShoppingListService
 from services.audio_service import AudioService
 from config.database import SessionLocal
+from config.auth import get_current_user, require_auth
 
 
 class PlanningController:
@@ -203,12 +207,20 @@ class PlanningController:
         """
         Confirm the current plan and create a shopping list with aggregated ingredients.
 
+        Requires authentication - the shopping list will be owned by the current user.
+
         Args:
             plan_name: Optional name for the plan
             use_smart_aggregation: If True, use Claude for intelligent quantity aggregation
 
         Returns the shopping list ID.
+
+        Raises:
+            ValueError: If no recipes selected or user not authenticated
         """
+        # Require authentication to create shopping lists
+        user = require_auth()
+
         recipe_ids = st.session_state.planning["selected_recipes"]
 
         if not recipe_ids:
@@ -223,6 +235,7 @@ class PlanningController:
         try:
             service = ShoppingListService(db)
             shopping_list = service.create_shopping_list_from_recipes(
+                user_id=user.user_id,
                 name=plan_name,
                 recipe_ids=recipe_ids,
                 use_claude=use_smart_aggregation

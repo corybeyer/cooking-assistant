@@ -104,15 +104,19 @@ cooking-assistant/
 
 | Table | Purpose |
 |-------|---------|
-| `Recipes` | Recipe metadata (name, description, times, servings) |
-| `Ingredients` | Normalized ingredient names |
-| `UnitsOfMeasure` | Normalized units |
+| `Recipes` | Recipe metadata (name, description, times, servings) - **global/shared** |
+| `Ingredients` | Normalized ingredient names - **global/shared** |
+| `UnitsOfMeasure` | Normalized units - **global/shared** |
 | `RecipeIngredients` | Links recipes to ingredients with quantities |
 | `Steps` | Recipe preparation steps with order |
+| `ShoppingLists` | User's shopping lists - **per-user** (has `UserId`) |
+| `ShoppingListItems` | Items in a shopping list |
+| `ShoppingListLinks` | Shareable links for shopping lists |
 
 Key relationships:
 - `Recipe` → has many `RecipeIngredients` → each links to `Ingredient` and optional `UnitOfMeasure`
 - `Recipe` → has many `Steps` (ordered by `OrderIndex`)
+- `ShoppingList` → belongs to a user (via `UserId`)
 - Foreign keys use `ON DELETE CASCADE`
 
 ## Key Patterns
@@ -163,6 +167,27 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 ```
 
+### Authentication (Azure Entra ID)
+```python
+from config.auth import get_current_user, require_auth
+
+# Optional auth check
+user = get_current_user()
+if user:
+    print(f"Logged in as {user.name}")
+
+# Required auth (stops page if not logged in)
+user = require_auth()
+print(f"User ID: {user.user_id}")
+```
+
+For local development, set environment variables to simulate a user:
+```bash
+export DEV_USER_ID='test-user-123'
+export DEV_USER_NAME='Test User'
+export DEV_USER_EMAIL='test@example.com'
+```
+
 ## Development Commands
 
 ```bash
@@ -197,6 +222,17 @@ docker run -p 80:80 --env-file .env cooking-assistant
 - [x] Claude integration for cooking guidance
 - [x] Docker deployment to Azure
 - [x] GitHub Actions CI/CD
+- [x] Multi-user data isolation with Azure Entra ID
+
+## Multi-User Support
+
+Shopping lists are now isolated per user:
+- Each `ShoppingList` has a `UserId` column (Entra ID object ID)
+- Users only see their own shopping lists
+- Shared links still work for unauthenticated access to specific lists
+- Recipes remain globally shared
+
+**Migration**: Run `infrastructure/migrations/001_add_userid_to_shopping_lists.sql` on existing databases.
 
 ## Future Work
 

@@ -65,8 +65,10 @@ CREATE TABLE Steps (
 -- ============================================
 
 -- ShoppingLists: Shopping list for meal planning
+-- UserId stores the Entra ID object ID (GUID) of the list owner
 CREATE TABLE ShoppingLists (
     ShoppingListId INT IDENTITY(1,1) PRIMARY KEY,
+    UserId NVARCHAR(255) NOT NULL,  -- Entra ID object ID
     Name NVARCHAR(200) NULL,
     CreatedDate DATETIME NOT NULL DEFAULT(GETDATE()),
     Status NVARCHAR(50) NOT NULL DEFAULT 'active'  -- active, completed, archived
@@ -152,6 +154,10 @@ ON Recipes(Cuisine);
 -- Optimize shopping list queries by status
 CREATE INDEX IX_ShoppingLists_Status
 ON ShoppingLists(Status);
+
+-- Optimize shopping list queries by user
+CREATE INDEX IX_ShoppingLists_UserId
+ON ShoppingLists(UserId);
 
 -- Optimize shopping list item lookups
 CREATE INDEX IX_ShoppingListItems_ShoppingListId
