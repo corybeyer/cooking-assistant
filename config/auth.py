@@ -13,10 +13,13 @@ Headers injected by Easy Auth:
 
 import base64
 import json
+import logging
 import os
 import streamlit as st
 from dataclasses import dataclass
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -70,10 +73,10 @@ def get_current_user() -> Optional[UserContext]:
                 )
     except AttributeError:
         # Streamlit version may not have st.context.headers
-        pass
-    except Exception:
+        logger.debug("st.context.headers not available in this Streamlit version")
+    except Exception as e:
         # Header access failed, try other methods
-        pass
+        logger.warning(f"Failed to access request headers: {e}")
 
     # Method 2: Check environment variables (for testing/development)
     # You can set these locally to simulate a user
