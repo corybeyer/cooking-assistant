@@ -71,6 +71,9 @@ class ShoppingController:
                 "current_list_id": None,
                 "link_code": None,
                 "shared_access_list_id": None,  # ID of list accessed via shared link
+                "removed_items": {},  # {list_id: set of item_ids}
+                "selected_products": {},  # {item_id: ProductMatch}
+                "price_results": {},  # {list_id: PriceComparisonResult}
             }
 
     # ==========================================
@@ -89,6 +92,88 @@ class ShoppingController:
     def get_link_code(self) -> Optional[str]:
         """Get the current shareable link code."""
         return st.session_state.shopping["link_code"]
+
+    # ==========================================
+    # Removed Items Management
+    # ==========================================
+
+    def get_removed_items(self, list_id: int) -> set[int]:
+        """Get set of removed item IDs for a list."""
+        return st.session_state.shopping["removed_items"].get(list_id, set())
+
+    def remove_item(self, list_id: int, item_id: int):
+        """Mark an item as removed (user already has it)."""
+        if list_id not in st.session_state.shopping["removed_items"]:
+            st.session_state.shopping["removed_items"][list_id] = set()
+        st.session_state.shopping["removed_items"][list_id].add(item_id)
+
+    def restore_item(self, list_id: int, item_id: int):
+        """Restore a previously removed item."""
+        if list_id in st.session_state.shopping["removed_items"]:
+            st.session_state.shopping["removed_items"][list_id].discard(item_id)
+
+    def is_item_removed(self, list_id: int, item_id: int) -> bool:
+        """Check if an item is marked as removed."""
+        return item_id in self.get_removed_items(list_id)
+
+    # ==========================================
+    # Product Selection Management
+    # ==========================================
+
+    def get_selected_product(self, item_id: int) -> Optional[ProductMatch]:
+        """Get the selected product for an item."""
+        return st.session_state.shopping["selected_products"].get(item_id)
+
+    def set_selected_product(self, item_id: int, product: ProductMatch):
+        """Set the selected product for an item."""
+        st.session_state.shopping["selected_products"][item_id] = product
+
+    def clear_selected_product(self, item_id: int):
+        """Clear the selected product for an item."""
+        st.session_state.shopping["selected_products"].pop(item_id, None)
+
+    # ==========================================
+    # Price Results Cache
+    # ==========================================
+
+    def get_cached_prices(self, list_id: int) -> Optional[PriceComparisonResult]:
+        """Get cached price results for a list."""
+        return st.session_state.shopping["price_results"].get(list_id)
+
+    def set_cached_prices(self, list_id: int, result: PriceComparisonResult):
+        """Cache price results for a list."""
+        st.session_state.shopping["price_results"][list_id] = result
+
+    def clear_cached_prices(self, list_id: int):
+        """Clear cached price results for a list."""
+        st.session_state.shopping["price_results"].pop(list_id, None)
+
+    def get_effective_total(self, list_id: int) -> float:
+        """
+        Calculate the effective total based on selections and removals.
+
+        Uses selected products where available, falls back to best match,
+        and excludes removed items.
+        """
+        cached = self.get_cached_prices(list_id)
+        if not cached or not cached.success:
+            return 0.0
+
+        removed = self.get_removed_items(list_id)
+        total = 0.0
+
+        for item_info in cached.items:
+            if item_info.item_id in removed:
+                continue
+
+            # Use selected product if available, otherwise best match
+            selected = self.get_selected_product(item_info.item_id)
+            if selected:
+                total += selected.price
+            elif item_info.best_match:
+                total += item_info.best_match.price
+
+        return total
 
     # ==========================================
     # Authentication Helpers
