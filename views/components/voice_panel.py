@@ -5,19 +5,36 @@ This component provides a consistent voice control experience across
 different views (Cooking, Planning) with:
 - Push to talk microphone button
 - Audio playback with native HTML5 controls
-- Voice accent selector
+- Voice selector (edge-tts neural voices)
+- Speed slider
 """
 
 import streamlit as st
 from typing import Optional, Callable
 
+from models.user_preferences import VOICE_OPTIONS, SPEED_OPTIONS
+
+
+# Speed labels for the slider
+SPEED_LABELS = {
+    -2: "Slower",
+    -1: "Slow",
+    0: "Normal",
+    1: "Fast",
+    2: "Faster",
+    3: "Quick",
+    4: "Rapid",
+}
+
 
 def render_voice_panel(
     audio_key: int,
     pending_audio: Optional[bytes],
-    accents: list[str],
-    current_accent: str,
-    on_accent_change: Callable[[str], None],
+    voices: dict[str, str],
+    current_voice: str,
+    current_speed: int,
+    on_voice_change: Callable[[str], None],
+    on_speed_change: Callable[[int], None],
 ) -> Optional[bytes]:
     """
     Render the voice control panel.
@@ -25,9 +42,11 @@ def render_voice_panel(
     Args:
         audio_key: Unique key for the audio input widget
         pending_audio: Audio bytes to play (if any)
-        accents: List of available voice accents
-        current_accent: Currently selected accent
-        on_accent_change: Callback when accent changes
+        voices: Dict of {voice_id: display_name}
+        current_voice: Currently selected voice ID
+        current_speed: Current speed slider value (-2 to +4)
+        on_voice_change: Callback when voice changes (receives voice_id)
+        on_speed_change: Callback when speed changes (receives slider value)
 
     Returns:
         Audio bytes if recording captured, None otherwise
@@ -69,17 +88,53 @@ def render_voice_panel(
 
     st.markdown("---")
 
-    # Accent selector
-    st.markdown("**Voice Accent**")
-    selected_accent = st.selectbox(
-        "Select accent:",
-        options=accents,
-        index=accents.index(current_accent) if current_accent in accents else 0,
+    # Voice selector
+    st.markdown("**Voice**")
+    voice_ids = list(voices.keys())
+    voice_names = list(voices.values())
+
+    # Get current index
+    current_idx = 0
+    if current_voice in voice_ids:
+        current_idx = voice_ids.index(current_voice)
+
+    selected_name = st.selectbox(
+        "Select voice:",
+        options=voice_names,
+        index=current_idx,
         label_visibility="collapsed",
-        key="voice_panel_accent"
+        key="voice_panel_voice"
     )
 
-    if selected_accent != current_accent:
-        on_accent_change(selected_accent)
+    # Map back to voice ID
+    selected_idx = voice_names.index(selected_name)
+    selected_voice_id = voice_ids[selected_idx]
+
+    if selected_voice_id != current_voice:
+        on_voice_change(selected_voice_id)
+
+    # Speed slider
+    st.markdown("**Speed**")
+
+    # Get the label for current speed
+    speed_label = SPEED_LABELS.get(current_speed, "Normal")
+
+    selected_speed = st.slider(
+        "Playback speed",
+        min_value=-2,
+        max_value=4,
+        value=current_speed,
+        step=1,
+        format="%d",
+        label_visibility="collapsed",
+        key="voice_panel_speed",
+        help="Adjust voice playback speed"
+    )
+
+    # Show the speed label
+    st.caption(f"Speed: {SPEED_LABELS.get(selected_speed, 'Normal')}")
+
+    if selected_speed != current_speed:
+        on_speed_change(selected_speed)
 
     return recorded_bytes

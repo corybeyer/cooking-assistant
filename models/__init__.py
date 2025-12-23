@@ -15,6 +15,7 @@ from models.entities import (
     ShoppingListItem,
     ShoppingListLink,
     GroceryPrice,
+    UserPreference,
 )
 
 __all__ = [
@@ -30,4 +31,6 @@ __all__ = [
     "ShoppingListItem",
     "ShoppingListLink",
     "GroceryPrice",
+    # User models
+    "UserPreference",
 ]

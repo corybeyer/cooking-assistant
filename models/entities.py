@@ -290,3 +290,25 @@ class GroceryPrice(Base):
 
     # Relationship
     ingredient = relationship("Ingredient")
+
+
+# ============================================
+# User Preferences Model
+# ============================================
+
+class UserPreference(Base):
+    """
+    User preferences stored as extensible JSON.
+
+    Stores user-specific settings like voice preferences, UI settings, etc.
+    The Preferences column is a JSON blob allowing easy extension without
+    schema migrations.
+
+    UserId is the Entra ID object ID (same as ShoppingLists).
+    """
+    __tablename__ = "UserPreferences"
+
+    UserId = Column(String(255), primary_key=True)  # Entra ID object ID
+    Preferences = Column(Text, nullable=False, default='{}')  # JSON blob
+    CreatedAt = Column(DateTime, nullable=False, server_default=func.now())
+    UpdatedAt = Column(DateTime, nullable=False, server_default=func.now())

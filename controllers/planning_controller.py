@@ -6,6 +6,7 @@ This controller handles:
 - Recipe selection and confirmation
 - Creating shopping lists from confirmed plans (owned by authenticated user)
 - Voice input/output for hands-free planning
+- Voice preferences (persisted to database for authenticated users)
 
 Multi-user support:
 - Shopping lists created from plans are owned by the authenticated user
@@ -21,6 +22,14 @@ from services.shopping_list_service import ShoppingListService
 from services.audio_service import AudioService
 from config.database import SessionLocal
 from config.auth import get_current_user, require_auth
+from models.repositories.user_preferences_repository import UserPreferencesRepository
+from models.user_preferences import (
+    VOICE_OPTIONS,
+    DEFAULT_VOICE_NAME,
+    DEFAULT_VOICE_RATE,
+    rate_to_slider_value,
+    slider_value_to_rate,
+)
 
 
 class PlanningController:
@@ -31,6 +40,7 @@ class PlanningController:
         self.recipes = RecipeService()
         self.audio = AudioService()
         self._init_session_state()
+        self._load_user_preferences()
 
     def _init_session_state(self):
         """Initialize session state if not already set."""
@@ -42,8 +52,55 @@ class PlanningController:
                 "shopping_list_id": None,
                 "audio_key": 0,
                 "pending_audio": None,
-                "voice_accent": "American 🇺🇸",
+                "voice_name": DEFAULT_VOICE_NAME,
+                "voice_rate": DEFAULT_VOICE_RATE,
+                "preferences_loaded": False,
             }
+
+    def _load_user_preferences(self):
+        """Load user preferences from database if authenticated."""
+        # Only load once per session
+        if st.session_state.planning.get("preferences_loaded"):
+            return
+
+        user = get_current_user()
+        if not user:
+            st.session_state.planning["preferences_loaded"] = True
+            return
+
+        try:
+            db = SessionLocal()
+            repo = UserPreferencesRepository(db)
+            prefs = repo.get(user.user_id)
+
+            st.session_state.planning["voice_name"] = prefs.voice.name
+            st.session_state.planning["voice_rate"] = prefs.voice.rate
+            st.session_state.planning["preferences_loaded"] = True
+        except Exception:
+            # If loading fails, use defaults
+            pass
+        finally:
+            db.close()
+
+    def _save_voice_preferences(self):
+        """Save voice preferences to database if authenticated."""
+        user = get_current_user()
+        if not user:
+            return
+
+        try:
+            db = SessionLocal()
+            repo = UserPreferencesRepository(db)
+            repo.update_voice(
+                user.user_id,
+                st.session_state.planning["voice_name"],
+                st.session_state.planning["voice_rate"]
+            )
+        except Exception:
+            # Silently fail - preferences are non-critical
+            pass
+        finally:
+            db.close()
 
     # ==========================================
     # Session State Accessors
@@ -69,13 +126,31 @@ class PlanningController:
     # Voice State Accessors
     # ==========================================
 
-    def get_voice_accent(self) -> str:
-        """Get the current voice accent."""
-        return st.session_state.planning.get("voice_accent", "American 🇺🇸")
+    def get_voice_name(self) -> str:
+        """Get the current voice name (edge-tts voice ID)."""
+        return st.session_state.planning.get("voice_name", DEFAULT_VOICE_NAME)
 
-    def set_voice_accent(self, accent: str):
-        """Set the voice accent."""
-        st.session_state.planning["voice_accent"] = accent
+    def set_voice_name(self, voice_name: str):
+        """Set the voice name and save to database."""
+        st.session_state.planning["voice_name"] = voice_name
+        self._save_voice_preferences()
+
+    def get_voice_rate(self) -> str:
+        """Get the current voice rate (e.g., '+20%')."""
+        return st.session_state.planning.get("voice_rate", DEFAULT_VOICE_RATE)
+
+    def set_voice_rate(self, rate: str):
+        """Set the voice rate and save to database."""
+        st.session_state.planning["voice_rate"] = rate
+        self._save_voice_preferences()
+
+    def get_speed_slider_value(self) -> int:
+        """Get current speed as slider value (-2 to +4)."""
+        return rate_to_slider_value(self.get_voice_rate())
+
+    def set_speed_from_slider(self, slider_value: int):
+        """Set voice rate from slider value."""
+        self.set_voice_rate(slider_value_to_rate(slider_value))
 
     def get_pending_audio(self) -> Optional[bytes]:
         """Get pending audio for playback and clear it."""
@@ -91,9 +166,9 @@ class PlanningController:
         """Increment audio key to reset widget."""
         st.session_state.planning["audio_key"] = self.get_audio_key() + 1
 
-    def get_available_accents(self) -> list[str]:
-        """Get available voice accents."""
-        return self.audio.get_available_accents()
+    def get_available_voices(self) -> dict[str, str]:
+        """Get available voices as {voice_id: display_name}."""
+        return self.audio.get_available_voices()
 
     # ==========================================
     # Recipe Data
@@ -144,7 +219,11 @@ class PlanningController:
 
         # Generate TTS audio if voice mode
         if with_voice and response:
-            audio_bytes = self.audio.text_to_speech(response, self.get_voice_accent())
+            audio_bytes = self.audio.text_to_speech(
+                response,
+                voice=self.get_voice_name(),
+                rate=self.get_voice_rate()
+            )
             if audio_bytes:
                 st.session_state.planning["pending_audio"] = audio_bytes
 
@@ -170,7 +249,6 @@ class PlanningController:
 
     def clear_conversation(self):
         """Clear the conversation and start fresh."""
-        current_accent = st.session_state.planning.get("voice_accent", "American 🇺🇸")
         st.session_state.planning = {
             "messages": [],
             "selected_recipes": [],
@@ -178,7 +256,9 @@ class PlanningController:
             "shopping_list_id": None,
             "audio_key": 0,
             "pending_audio": None,
-            "voice_accent": current_accent,
+            "voice_name": st.session_state.planning.get("voice_name", DEFAULT_VOICE_NAME),
+            "voice_rate": st.session_state.planning.get("voice_rate", DEFAULT_VOICE_RATE),
+            "preferences_loaded": True,  # Keep loaded state
         }
 
     # ==========================================
