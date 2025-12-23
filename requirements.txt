@@ -26,5 +26,8 @@ azure-communication-sms>=1.0.1
 azure-communication-email>=1.0.0  # For email notifications
 azure-identity>=1.15.0  # For Managed Identity authentication
 
+# Grocery API integrations
+httpx>=0.27.0  # For Kroger API requests
+
 # Development
 python-dotenv==1.0.1

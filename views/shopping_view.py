@@ -5,11 +5,12 @@ This view handles:
 - Displaying shopping lists
 - Checking off items
 - Sharing lists via link
+- Price comparison via Kroger API
 """
 
 import streamlit as st
 
-from controllers.shopping_controller import ShoppingController
+from controllers.shopping_controller import ShoppingController, PriceComparisonResult
 from views.components.sidebar import render_shopping_list_sidebar
 from views.components.shopping_item import render_shopping_items_grouped
 from views.components.shopping_stats import render_shopping_stats
@@ -78,6 +79,10 @@ class ShoppingView:
         render_shopping_stats(total, checked)
         st.markdown("---")
 
+        # Price comparison section
+        self._render_price_comparison(list_id)
+        st.markdown("---")
+
         # Share section
         self._render_share_section(list_id)
         st.markdown("---")
@@ -85,6 +90,102 @@ class ShoppingView:
         # Items grouped by category
         grouped = self.controller.get_items_grouped(list_id)
         render_shopping_items_grouped(grouped, self.controller.check_item)
+
+    def _render_price_comparison(self, list_id: int):
+        """Render the price comparison section."""
+        st.markdown("#### Price Comparison")
+
+        # Check if Kroger is configured
+        if not self.controller.is_kroger_configured():
+            issues = self.controller.get_kroger_config_issues()
+            st.warning("Kroger price comparison is not configured.")
+            if issues:
+                with st.expander("Configuration needed"):
+                    for issue in issues:
+                        st.markdown(f"- {issue}")
+            return
+
+        # Initialize session state for price results
+        if "price_results" not in st.session_state:
+            st.session_state.price_results = {}
+
+        # Check if we have cached results for this list
+        cached_result = st.session_state.price_results.get(list_id)
+
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            if st.button("Get Kroger Prices", type="primary", use_container_width=True):
+                with st.spinner("Fetching prices from Kroger..."):
+                    result = self.controller.get_prices_for_list(list_id)
+                    st.session_state.price_results[list_id] = result
+                    st.rerun()
+
+        with col2:
+            if cached_result:
+                if st.button("Clear", use_container_width=True):
+                    del st.session_state.price_results[list_id]
+                    st.rerun()
+
+        # Display results if available
+        if cached_result:
+            self._render_price_results(cached_result)
+
+    def _render_price_results(self, result: PriceComparisonResult):
+        """Render the price comparison results."""
+        if not result.success:
+            st.error(f"Failed to fetch prices: {result.error}")
+            return
+
+        # Summary metrics
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Estimated Total", f"${result.total_estimated:.2f}")
+        with col2:
+            st.metric("Items Priced", f"{result.items_with_prices}")
+        with col3:
+            st.metric("Not Found", f"{result.items_without_prices}")
+
+        if result.items_without_prices > 0:
+            st.caption("Some items couldn't be matched. Total may be higher.")
+
+        # Item-by-item breakdown
+        with st.expander("View Price Details", expanded=False):
+            for item_info in result.items:
+                col1, col2, col3 = st.columns([3, 2, 1])
+
+                with col1:
+                    st.markdown(f"**{item_info.ingredient_name}**")
+                    if item_info.quantity:
+                        st.caption(item_info.quantity)
+
+                with col2:
+                    if item_info.best_match:
+                        st.markdown(f"{item_info.best_match.product_name}")
+                        if item_info.best_match.size:
+                            st.caption(item_info.best_match.size)
+                    else:
+                        st.caption(item_info.error or "Not found")
+
+                with col3:
+                    if item_info.best_match:
+                        st.markdown(f"**${item_info.best_match.price:.2f}**")
+                        st.caption(item_info.best_match.unit)
+                    else:
+                        st.markdown("--")
+
+                # Show alternative products in a nested expander
+                if len(item_info.all_matches) > 1:
+                    with st.expander(f"See {len(item_info.all_matches) - 1} alternatives"):
+                        for alt in item_info.all_matches[1:]:
+                            alt_col1, alt_col2 = st.columns([3, 1])
+                            with alt_col1:
+                                st.markdown(f"{alt.product_name}")
+                                if alt.size:
+                                    st.caption(alt.size)
+                            with alt_col2:
+                                st.markdown(f"${alt.price:.2f}")
+
+                st.divider()
 
     def _render_share_section(self, list_id: int):
         """Render the share/send section."""

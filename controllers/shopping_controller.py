@@ -16,6 +16,7 @@ from config.database import SessionLocal
 from models import ShoppingList, ShoppingListItem
 from models.repositories import ShoppingListRepository
 from services.notification_service import NotificationService, SMSResult, EmailResult
+from services.grocery_apis import KrogerAPI, PriceResult, ProductMatch
 
 
 @dataclass
@@ -27,6 +28,29 @@ class ShoppingListSummary:
     checked_count: int
     recipe_count: int
     status: str
+
+
+@dataclass
+class ItemPriceInfo:
+    """Price information for a shopping list item."""
+    item_id: int
+    ingredient_name: str
+    quantity: str
+    best_match: Optional[ProductMatch]
+    all_matches: list[ProductMatch]
+    error: Optional[str] = None
+
+
+@dataclass
+class PriceComparisonResult:
+    """Result of price comparison for a shopping list."""
+    success: bool
+    items: list[ItemPriceInfo]
+    total_estimated: float
+    store_name: str
+    items_with_prices: int
+    items_without_prices: int
+    error: Optional[str] = None
 
 
 class ShoppingController:
@@ -321,3 +345,145 @@ class ShoppingController:
         """Send a test email to verify configuration."""
         notification = NotificationService()
         return notification.send_test_email(email)
+
+    # ==========================================
+    # Price Comparison Operations
+    # ==========================================
+
+    def is_kroger_configured(self) -> bool:
+        """Check if Kroger API is properly configured."""
+        kroger = KrogerAPI()
+        return kroger.is_configured()
+
+    def get_kroger_config_issues(self) -> list[str]:
+        """Get list of Kroger configuration issues."""
+        issues = []
+        settings = get_settings()
+
+        if not settings.kroger_client_id:
+            issues.append("Missing KROGER_CLIENT_ID")
+        if not settings.kroger_client_secret:
+            issues.append("Missing KROGER_CLIENT_SECRET")
+        if not settings.kroger_location_id:
+            issues.append("KROGER_LOCATION_ID not set (prices may vary by location)")
+
+        return issues
+
+    def get_price_for_ingredient(
+        self,
+        ingredient_name: str,
+        limit: int = 5
+    ) -> PriceResult:
+        """
+        Get prices for a single ingredient from Kroger.
+
+        Args:
+            ingredient_name: Name of the ingredient to search
+            limit: Maximum number of product matches to return
+
+        Returns:
+            PriceResult with matching products
+        """
+        kroger = KrogerAPI()
+        return kroger.search_products(ingredient_name, limit=limit)
+
+    def get_prices_for_list(self, list_id: int) -> PriceComparisonResult:
+        """
+        Get prices for all items in a shopping list.
+
+        Args:
+            list_id: Shopping list ID
+
+        Returns:
+            PriceComparisonResult with prices for each item
+        """
+        kroger = KrogerAPI()
+
+        if not kroger.is_configured():
+            return PriceComparisonResult(
+                success=False,
+                items=[],
+                total_estimated=0.0,
+                store_name="Kroger",
+                items_with_prices=0,
+                items_without_prices=0,
+                error="Kroger API not configured"
+            )
+
+        # Get shopping list items
+        shopping_list = self.get_list(list_id)
+        if not shopping_list:
+            return PriceComparisonResult(
+                success=False,
+                items=[],
+                total_estimated=0.0,
+                store_name="Kroger",
+                items_with_prices=0,
+                items_without_prices=0,
+                error="Shopping list not found"
+            )
+
+        items = shopping_list.items or []
+        if not items:
+            return PriceComparisonResult(
+                success=True,
+                items=[],
+                total_estimated=0.0,
+                store_name="Kroger",
+                items_with_prices=0,
+                items_without_prices=0
+            )
+
+        # Fetch prices for each item
+        item_prices: list[ItemPriceInfo] = []
+        total = 0.0
+        with_prices = 0
+        without_prices = 0
+
+        for item in items:
+            ingredient_name = item.ingredient.Name if item.ingredient else "Unknown"
+            quantity = item.AggregatedQuantity or ""
+
+            # Search Kroger for this ingredient
+            result = kroger.search_products(ingredient_name, limit=5)
+
+            if result.success and result.products:
+                best_match = result.products[0]  # First result is best match
+                total += best_match.price
+                with_prices += 1
+
+                item_prices.append(ItemPriceInfo(
+                    item_id=item.ShoppingListItemId,
+                    ingredient_name=ingredient_name,
+                    quantity=quantity,
+                    best_match=best_match,
+                    all_matches=result.products
+                ))
+            else:
+                without_prices += 1
+                item_prices.append(ItemPriceInfo(
+                    item_id=item.ShoppingListItemId,
+                    ingredient_name=ingredient_name,
+                    quantity=quantity,
+                    best_match=None,
+                    all_matches=[],
+                    error=result.error if not result.success else "No products found"
+                ))
+
+        return PriceComparisonResult(
+            success=True,
+            items=item_prices,
+            total_estimated=total,
+            store_name="Kroger",
+            items_with_prices=with_prices,
+            items_without_prices=without_prices
+        )
+
+    def find_kroger_locations(self, zip_code: str) -> list[dict]:
+        """
+        Find Kroger store locations near a zip code.
+
+        Returns list of locations with location_id, name, and address.
+        """
+        kroger = KrogerAPI()
+        return kroger.find_nearby_locations(zip_code, limit=5)

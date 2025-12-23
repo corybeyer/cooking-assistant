@@ -102,7 +102,7 @@ Links use a token-based system stored in `ShoppingListLinks` table with configur
 | 3 | Shopping List Aggregation Service | Complete |
 | 4 | Checkable Shopping List Page | Complete |
 | 5 | SMS Delivery via Azure Communication Services | Complete |
-| 6 | Grocery Price Comparison | Future |
+| 6 | Grocery Price Comparison (Kroger) | Complete |
 
 ## Database Schema
 
@@ -140,14 +140,26 @@ AZURE_COMM_SENDER_NUMBER=+15125551234
 4. Grant Container App "Contributor" role on Communication Services resource
 5. Set environment variables on Container App
 
+### Kroger API
+
+**Registration:** https://developer.kroger.com/
+
+```
+KROGER_CLIENT_ID=your_client_id
+KROGER_CLIENT_SECRET=your_client_secret
+KROGER_LOCATION_ID=01234567  # Optional: specific store for accurate pricing
+```
+
+To find your local store's location ID, use the `find_kroger_locations()` method with a zip code.
+
 ## Future Enhancements
 
-### Phase 6: Grocery Price Comparison
+### Additional Grocery APIs
 
-Original vision included comparing prices across grocers (H-E-B, Kroger, Walmart). Challenges:
-- H-E-B has no public API
-- Would require web scraping or third-party data providers
-- Price accuracy and freshness concerns
+Kroger integration is complete. Future stores to add:
+- **Walmart** - Good affiliate API available
+- **Instacart** - Partner API (covers Costco, H-E-B, etc.) - requires partnership
+- **H-E-B** - No public API, would require web scraping or third-party data
 
 ### Other Ideas
 
@@ -162,8 +174,10 @@ Original vision included comparing prices across grocers (H-E-B, Kroger, Walmart
 |------|---------|
 | `services/shopping_list_service.py` | Ingredient aggregation and categorization |
 | `services/notification_service.py` | SMS delivery via Azure Communication Services |
+| `services/grocery_apis/kroger.py` | Kroger API client for price lookup |
+| `services/grocery_apis/base.py` | Abstract base class for grocery APIs |
 | `controllers/shopping_controller.py` | Shopping list business logic |
-| `views/shopping_view.py` | Checkable list UI with share options |
+| `views/shopping_view.py` | Checkable list UI with share and price comparison |
 | `pages/3_Shopping_List.py` | Streamlit page entry point |
 | `infrastructure/schema_shopping_list.sql` | Database DDL for new tables |
 
