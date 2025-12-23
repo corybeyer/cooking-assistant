@@ -13,6 +13,7 @@ def render_chat_messages(messages: list[dict], height: int = 450):
         messages: List of {"role": "user/assistant", "content": "..."}
         height: Container height in pixels
     """
+    st.markdown("### Conversation")
     chat_container = st.container(height=height)
     with chat_container:
         for msg in messages:
