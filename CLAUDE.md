@@ -232,7 +232,50 @@ Shopping lists are now isolated per user:
 - Shared links still work for unauthenticated access to specific lists
 - Recipes remain globally shared
 
-**Migration**: Run `infrastructure/migrations/001_add_userid_to_shopping_lists.sql` on existing databases.
+### Setup Authentication (Production)
+
+Run the setup script to enable Easy Auth on your Container App:
+
+```bash
+# Make executable
+chmod +x infrastructure/setup-easy-auth.sh
+
+# Run it
+./infrastructure/setup-easy-auth.sh <resource-group> <container-app-name>
+
+# Example:
+./infrastructure/setup-easy-auth.sh rg-cooking-assistant-dev ca-dev-cooking-assistant
+```
+
+This will:
+1. Create an Entra ID App Registration
+2. Configure Easy Auth on your Container App
+3. Require users to sign in with Microsoft accounts
+
+### Setup Authentication (Local Development)
+
+When running locally, there's no Azure Easy Auth. Simulate a user with env vars:
+
+```bash
+# Get your Entra ID Object ID (if you have Azure CLI)
+az ad signed-in-user show --query id -o tsv
+
+# Set environment variables before running
+export DEV_USER_ID='xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+export DEV_USER_NAME='Your Name'
+export DEV_USER_EMAIL='you@example.com'
+
+# Then run the app
+streamlit run streamlit_app.py
+```
+
+### Database Migration
+
+Run on existing databases to add the `UserId` column:
+```bash
+sqlcmd -S your-server.database.windows.net -d cookingdb -U admin -P 'password' \
+  -i infrastructure/migrations/001_add_userid_to_shopping_lists.sql
+```
 
 ## Future Work
 
