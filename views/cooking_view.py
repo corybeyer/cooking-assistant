@@ -66,21 +66,76 @@ class CookingView:
         # Initialize discovery with greeting if needed
         self.controller.init_discovery()
 
-        st.markdown("### Let's find something to cook!")
+        st.markdown("Let's find something to cook!")
 
-        # Display discovery chat messages
-        messages = self.controller.get_discovery_messages()
-        render_chat_messages(messages)
+        # Two-column layout: Chat on left, Voice Panel on right
+        chat_col, voice_col = st.columns([3, 1])
 
-        # Chat input
-        if prompt := st.chat_input("What would you like to cook?"):
-            with st.spinner("Thinking..."):
-                success, error = self.controller.send_discovery_message(prompt)
+        with chat_col:
+            # Display discovery chat messages
+            messages = self.controller.get_discovery_messages()
+            render_chat_messages(messages)
 
-            if success:
+        with voice_col:
+            self._render_discovery_voice_panel()
+
+    def _render_discovery_voice_panel(self):
+        """Render voice control panel for discovery mode."""
+        # Header outside container to match chat layout
+        st.markdown("### Voice Controls")
+
+        # Wrap all controls in container to match chat container height
+        voice_container = st.container(height=450)
+        with voice_container:
+            # Voice input
+            audio_bytes = render_voice_panel(
+                audio_key=self.controller.get_audio_key(),
+                pending_audio=self.controller.get_pending_audio(),
+                accents=self.controller.get_available_accents(),
+                current_accent=self.controller.get_voice_accent(),
+                on_accent_change=self.controller.set_voice_accent,
+            )
+
+            if audio_bytes:
+                with st.spinner("Transcribing..."):
+                    success, error = self.controller.handle_discovery_voice_input(audio_bytes)
+
+                if success:
+                    self.controller.increment_audio_key()
+                    st.rerun()
+                elif error:
+                    st.warning(error)
+
+            # Text input as alternative
+            st.markdown("---")
+            st.markdown("**Or type:**")
+            user_input = st.text_input(
+                "Type your message",
+                key="discovery_text_input",
+                placeholder="Type here...",
+                label_visibility="collapsed"
+            )
+
+            if user_input:
+                with st.spinner("Thinking..."):
+                    self.controller.send_discovery_message(user_input)
                 st.rerun()
-            elif error:
-                st.error(error)
+
+            # Quick prompts for discovery
+            st.markdown("---")
+            st.markdown("**Quick prompts:**")
+
+            if st.button("Something quick", use_container_width=True, key="qp_quick_disc"):
+                self.controller.send_discovery_message("I want something quick and easy")
+                st.rerun()
+
+            if st.button("Comfort food", use_container_width=True, key="qp_comfort"):
+                self.controller.send_discovery_message("I'm in the mood for comfort food")
+                st.rerun()
+
+            if st.button("Surprise me!", use_container_width=True, key="qp_surprise"):
+                self.controller.send_discovery_message("Surprise me with a recommendation!")
+                st.rerun()
 
     def _render_cooking_session(self):
         """Render active cooking session."""
