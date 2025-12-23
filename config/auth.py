@@ -37,11 +37,10 @@ def get_current_user() -> Optional[UserContext]:
     Returns:
         UserContext if authenticated, None otherwise
     """
-    # Method 1: Try to get headers from Streamlit's internal context
+    # Method 1: Try to get headers from Streamlit's context
     # This works when running behind Azure Container Apps Easy Auth
     try:
-        from streamlit.web.server.websocket_headers import _get_websocket_headers
-        headers = _get_websocket_headers()
+        headers = st.context.headers
 
         if headers:
             # Headers are lowercase in the dict
@@ -69,8 +68,8 @@ def get_current_user() -> Optional[UserContext]:
                     name=name or email or "User",
                     email=email or name  # UPN is often the email
                 )
-    except ImportError:
-        # Streamlit version may not have this
+    except AttributeError:
+        # Streamlit version may not have st.context.headers
         pass
     except Exception:
         # Header access failed, try other methods
