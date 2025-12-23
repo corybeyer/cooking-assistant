@@ -253,6 +253,15 @@ class CookingController:
         state["discovery_messages"].append({"role": "user", "content": text})
         state["discovery_messages"].append({"role": "assistant", "content": response_text})
 
+        # Generate TTS audio for the response
+        audio_bytes = self.audio.text_to_speech(
+            response_text,
+            voice=state.get("voice_name", DEFAULT_VOICE_NAME),
+            rate=state.get("voice_rate", DEFAULT_VOICE_RATE)
+        )
+        if audio_bytes:
+            state["pending_audio"] = audio_bytes
+
         # If Claude selected a recipe, start the cooking session
         if selected_recipe_id:
             self.start_session(selected_recipe_id)
