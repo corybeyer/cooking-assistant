@@ -63,52 +63,58 @@ class PlanningView:
 
     def _render_voice_panel(self):
         """Render voice control panel with all input methods."""
-        # Voice input
-        audio_bytes = render_voice_panel(
-            audio_key=self.controller.get_audio_key(),
-            pending_audio=self.controller.get_pending_audio(),
-            accents=self.controller.get_available_accents(),
-            current_accent=self.controller.get_voice_accent(),
-            on_accent_change=self.controller.set_voice_accent,
-        )
+        # Header outside container to match chat layout
+        st.markdown("### Voice Controls")
 
-        if audio_bytes:
-            with st.spinner("Transcribing..."):
-                success, error = self.controller.handle_voice_input(audio_bytes)
+        # Wrap all controls in container to match chat container height
+        voice_container = st.container(height=450)
+        with voice_container:
+            # Voice input
+            audio_bytes = render_voice_panel(
+                audio_key=self.controller.get_audio_key(),
+                pending_audio=self.controller.get_pending_audio(),
+                accents=self.controller.get_available_accents(),
+                current_accent=self.controller.get_voice_accent(),
+                on_accent_change=self.controller.set_voice_accent,
+            )
 
-            if success:
-                self.controller.increment_audio_key()
+            if audio_bytes:
+                with st.spinner("Transcribing..."):
+                    success, error = self.controller.handle_voice_input(audio_bytes)
+
+                if success:
+                    self.controller.increment_audio_key()
+                    st.rerun()
+                elif error:
+                    st.warning(error)
+
+            # Text input as alternative
+            st.markdown("---")
+            st.markdown("**Or type:**")
+            user_input = st.text_input(
+                "Type your message",
+                key="planning_text_input",
+                placeholder="Type here...",
+                label_visibility="collapsed"
+            )
+
+            if user_input:
+                with st.spinner("Thinking..."):
+                    self.controller.send_message(user_input)
                 st.rerun()
-            elif error:
-                st.warning(error)
 
-        # Text input as alternative
-        st.markdown("---")
-        st.markdown("**Or type:**")
-        user_input = st.text_input(
-            "Type your message",
-            key="planning_text_input",
-            placeholder="Type here...",
-            label_visibility="collapsed"
-        )
+            # Quick prompts (stacked vertically for narrow column)
+            st.markdown("---")
+            st.markdown("**Quick prompts:**")
 
-        if user_input:
-            with st.spinner("Thinking..."):
-                self.controller.send_message(user_input)
-            st.rerun()
+            if st.button("Healthy meals", use_container_width=True, key="qp_healthy"):
+                self.controller.send_message("I want healthy, nutritious meals")
+                st.rerun()
 
-        # Quick prompts (stacked vertically for narrow column)
-        st.markdown("---")
-        st.markdown("**Quick prompts:**")
+            if st.button("Quick & easy", use_container_width=True, key="qp_quick"):
+                self.controller.send_message("I need quick meals under 30 minutes")
+                st.rerun()
 
-        if st.button("Healthy meals", use_container_width=True, key="qp_healthy"):
-            self.controller.send_message("I want healthy, nutritious meals")
-            st.rerun()
-
-        if st.button("Quick & easy", use_container_width=True, key="qp_quick"):
-            self.controller.send_message("I need quick meals under 30 minutes")
-            st.rerun()
-
-        if st.button("Special occasion", use_container_width=True, key="qp_special"):
-            self.controller.send_message("I'm planning for a special occasion")
-            st.rerun()
+            if st.button("Special occasion", use_container_width=True, key="qp_special"):
+                self.controller.send_message("I'm planning for a special occasion")
+                st.rerun()

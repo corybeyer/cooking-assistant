@@ -102,27 +102,31 @@ class CookingView:
 
     def _render_chat_area(self):
         """Render main chat area with messages."""
-        st.markdown("### Chat")
-
-        # Display chat messages in scrollable container
+        # Display chat messages in scrollable container (header is in component)
         render_chat_messages(self.controller.get_messages())
 
     def _render_voice_panel(self):
         """Render voice control panel."""
-        audio_bytes = render_voice_panel(
-            audio_key=self.controller.get_audio_key(),
-            pending_audio=self.controller.get_pending_audio(),
-            accents=self.controller.get_available_accents(),
-            current_accent=self.controller.get_voice_accent(),
-            on_accent_change=self.controller.set_voice_accent,
-        )
+        # Header outside container to match chat layout
+        st.markdown("### Voice Controls")
 
-        if audio_bytes:
-            with st.spinner("Transcribing..."):
-                success, error = self.controller.handle_voice_input(audio_bytes)
+        # Wrap controls in container to match chat container height
+        voice_container = st.container(height=450)
+        with voice_container:
+            audio_bytes = render_voice_panel(
+                audio_key=self.controller.get_audio_key(),
+                pending_audio=self.controller.get_pending_audio(),
+                accents=self.controller.get_available_accents(),
+                current_accent=self.controller.get_voice_accent(),
+                on_accent_change=self.controller.set_voice_accent,
+            )
 
-            if success:
-                self.controller.increment_audio_key()
-                st.rerun()
-            elif error:
-                st.warning(error)
+            if audio_bytes:
+                with st.spinner("Transcribing..."):
+                    success, error = self.controller.handle_voice_input(audio_bytes)
+
+                if success:
+                    self.controller.increment_audio_key()
+                    st.rerun()
+                elif error:
+                    st.warning(error)

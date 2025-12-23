@@ -50,7 +50,6 @@ def render_voice_panel(
     """, unsafe_allow_html=True)
 
     # Push to talk section
-    st.markdown("### Voice Controls")
     st.markdown("**Tap to Talk**")
 
     audio = st.audio_input(
