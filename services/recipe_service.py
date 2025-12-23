@@ -77,21 +77,21 @@ class RecipeService:
             db.close()
 
     def format_for_claude(self, recipe: Recipe) -> str:
-        """Format recipe as text for Claude's context."""
+        """Format recipe as plain text for Claude's context (no markdown - will be read aloud)."""
         if not recipe:
             return ""
 
         lines = [
-            f"# {recipe.Name}",
+            recipe.Name,
             "",
-            f"**Description:** {recipe.Description or 'No description'}",
-            f"**Cuisine:** {recipe.Cuisine or 'Not specified'}",
-            f"**Category:** {recipe.Category or 'Not specified'}",
-            f"**Prep Time:** {recipe.PrepTime or '?'} minutes",
-            f"**Cook Time:** {recipe.CookTime or '?'} minutes",
-            f"**Servings:** {recipe.Servings or '?'}",
+            f"Description: {recipe.Description or 'No description'}",
+            f"Cuisine: {recipe.Cuisine or 'Not specified'}",
+            f"Category: {recipe.Category or 'Not specified'}",
+            f"Prep Time: {recipe.PrepTime or '?'} minutes",
+            f"Cook Time: {recipe.CookTime or '?'} minutes",
+            f"Servings: {recipe.Servings or '?'}",
             "",
-            "## Ingredients",
+            "Ingredients:",
         ]
 
         for ri in sorted(recipe.ingredients, key=lambda x: x.OrderIndex):
@@ -99,7 +99,7 @@ class RecipeService:
             line = f"- {ri.Quantity or ''} {unit} {ri.ingredient.Name}".strip()
             lines.append(line)
 
-        lines.extend(["", "## Steps"])
+        lines.extend(["", "Steps:"])
 
         for step in sorted(recipe.steps, key=lambda x: x.OrderIndex):
             lines.append(f"{step.OrderIndex}. {step.Description}")
