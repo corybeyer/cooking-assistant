@@ -68,8 +68,10 @@ class KrogerAPI(GroceryAPIBase):
             return None
 
         try:
-            # Create Basic auth header
-            credentials = f"{self.settings.kroger_client_id}:{self.settings.kroger_client_secret}"
+            # Create Basic auth header (strip whitespace from credentials)
+            client_id = self.settings.kroger_client_id.strip()
+            client_secret = self.settings.kroger_client_secret.strip()
+            credentials = f"{client_id}:{client_secret}"
             encoded_credentials = base64.b64encode(credentials.encode()).decode()
 
             headers = {
@@ -102,9 +104,15 @@ class KrogerAPI(GroceryAPIBase):
         except httpx.HTTPStatusError as e:
             status = e.response.status_code
             if status == 401:
-                self._last_auth_error = "Invalid Kroger API credentials. Check your KROGER_CLIENT_ID and KROGER_CLIENT_SECRET."
+                self._last_auth_error = (
+                    "Invalid Kroger API credentials. Troubleshooting tips:\n"
+                    "1. Verify KROGER_CLIENT_ID and KROGER_CLIENT_SECRET are correct\n"
+                    "2. Ensure no extra whitespace in your .env file\n"
+                    "3. Confirm your Kroger Developer app has 'Product' API access enabled\n"
+                    "4. Try regenerating your client secret at developer.kroger.com"
+                )
             elif status == 400:
-                self._last_auth_error = "Bad request to Kroger API. The credentials may be malformed."
+                self._last_auth_error = "Bad request to Kroger API. The credentials may be malformed or contain invalid characters."
             else:
                 self._last_auth_error = f"Kroger API error (HTTP {status})"
             logger.error(f"Kroger auth failed: {status} - {e.response.text}")
