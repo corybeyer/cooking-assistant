@@ -16,10 +16,6 @@
 --
 -- ============================================
 
--- Set a default user ID for existing lists
--- Replace with your admin user's Entra ID object ID
-DECLARE @DefaultUserId NVARCHAR(255) = 'SYSTEM-MIGRATION-USER';
-
 -- ============================================
 -- Step 1: Add the UserId column (nullable initially)
 -- ============================================
@@ -42,10 +38,12 @@ GO
 -- ============================================
 -- Step 2: Populate UserId for existing records
 -- ============================================
+-- Set a default user ID for existing lists
+-- Replace 'SYSTEM-MIGRATION-USER' with your admin user's Entra ID object ID
 
 -- Option 1: Assign to default user (recommended for production)
 UPDATE ShoppingLists
-SET UserId = @DefaultUserId
+SET UserId = 'SYSTEM-MIGRATION-USER'
 WHERE UserId IS NULL;
 
 PRINT 'Updated existing shopping lists with default user';

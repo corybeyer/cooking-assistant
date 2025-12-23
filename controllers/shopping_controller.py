@@ -218,8 +218,16 @@ class ShoppingController:
     # Link Operations
     # ==========================================
 
-    def generate_link(self, list_id: int, expires_days: int = 7) -> str:
-        """Generate a shareable link for a shopping list."""
+    def generate_link(self, list_id: int, expires_days: int = 7) -> Optional[str]:
+        """
+        Generate a shareable link for a shopping list.
+
+        Only the owner can generate a link for their list.
+        Returns None if the user doesn't have access.
+        """
+        if not self.can_access_list(list_id):
+            return None
+
         db = SessionLocal()
         try:
             repo = ShoppingListRepository(db)
@@ -248,7 +256,14 @@ class ShoppingController:
     # ==========================================
 
     def delete_list(self, list_id: int) -> bool:
-        """Delete a shopping list."""
+        """
+        Delete a shopping list.
+
+        Only the owner can delete their list.
+        """
+        if not self.can_access_list(list_id):
+            return False
+
         db = SessionLocal()
         try:
             repo = ShoppingListRepository(db)
@@ -261,7 +276,14 @@ class ShoppingController:
             db.close()
 
     def mark_complete(self, list_id: int) -> bool:
-        """Mark a shopping list as complete."""
+        """
+        Mark a shopping list as complete.
+
+        Only the owner can mark their list as complete.
+        """
+        if not self.can_access_list(list_id):
+            return False
+
         db = SessionLocal()
         try:
             repo = ShoppingListRepository(db)
