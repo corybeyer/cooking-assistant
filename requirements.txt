@@ -16,7 +16,7 @@ anthropic>=0.40.0
 # Streamlit app
 streamlit>=1.40.0
 SpeechRecognition>=3.10.0  # Google Speech Recognition (free, no API key)
-gTTS>=2.5.0                # Text-to-speech
+edge-tts>=6.1.0            # Microsoft Edge neural text-to-speech (free, high quality)
 
 # Azure Speech (add later)
 # azure-cognitiveservices-speech==1.35.0

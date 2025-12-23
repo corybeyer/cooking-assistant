@@ -5,6 +5,7 @@ This controller handles:
 - Session state initialization and management
 - Coordinating between services
 - Rate limiting
+- Voice preferences (persisted to database for authenticated users)
 """
 
 import streamlit as st
@@ -14,6 +15,17 @@ from typing import Optional
 from services.claude_service import ClaudeService
 from services.recipe_service import RecipeService, RecipeSummary
 from services.audio_service import AudioService
+from config.database import SessionLocal
+from config.auth import get_current_user
+from models.repositories.user_preferences_repository import UserPreferencesRepository
+from models.user_preferences import (
+    UserPreferencesData,
+    VOICE_OPTIONS,
+    DEFAULT_VOICE_NAME,
+    DEFAULT_VOICE_RATE,
+    rate_to_slider_value,
+    slider_value_to_rate,
+)
 
 
 # Rate limit configuration
@@ -29,6 +41,7 @@ class CookingController:
         self.recipes = RecipeService()
         self.audio = AudioService()
         self._init_session_state()
+        self._load_user_preferences()
 
     def _init_session_state(self):
         """Initialize session state if not already set."""
@@ -44,10 +57,57 @@ class CookingController:
                 "messages": [],
                 "audio_key": 0,
                 "pending_audio": None,
-                "voice_accent": "American 🇺🇸",
+                "voice_name": DEFAULT_VOICE_NAME,
+                "voice_rate": DEFAULT_VOICE_RATE,
+                "preferences_loaded": False,
             }
         if "request_timestamps" not in st.session_state:
             st.session_state.request_timestamps = []
+
+    def _load_user_preferences(self):
+        """Load user preferences from database if authenticated."""
+        # Only load once per session
+        if st.session_state.cooking.get("preferences_loaded"):
+            return
+
+        user = get_current_user()
+        if not user:
+            st.session_state.cooking["preferences_loaded"] = True
+            return
+
+        try:
+            db = SessionLocal()
+            repo = UserPreferencesRepository(db)
+            prefs = repo.get(user.user_id)
+
+            st.session_state.cooking["voice_name"] = prefs.voice.name
+            st.session_state.cooking["voice_rate"] = prefs.voice.rate
+            st.session_state.cooking["preferences_loaded"] = True
+        except Exception:
+            # If loading fails, use defaults
+            pass
+        finally:
+            db.close()
+
+    def _save_voice_preferences(self):
+        """Save voice preferences to database if authenticated."""
+        user = get_current_user()
+        if not user:
+            return
+
+        try:
+            db = SessionLocal()
+            repo = UserPreferencesRepository(db)
+            repo.update_voice(
+                user.user_id,
+                st.session_state.cooking["voice_name"],
+                st.session_state.cooking["voice_rate"]
+            )
+        except Exception:
+            # Silently fail - preferences are non-critical
+            pass
+        finally:
+            db.close()
 
     def _check_rate_limit(self) -> bool:
         """Check if user has exceeded rate limit. Returns True if allowed."""
@@ -88,13 +148,31 @@ class CookingController:
         """Get the chat message history."""
         return st.session_state.cooking["messages"]
 
-    def get_voice_accent(self) -> str:
-        """Get the current voice accent."""
-        return st.session_state.cooking["voice_accent"]
+    def get_voice_name(self) -> str:
+        """Get the current voice name (edge-tts voice ID)."""
+        return st.session_state.cooking.get("voice_name", DEFAULT_VOICE_NAME)
 
-    def set_voice_accent(self, accent: str):
-        """Set the voice accent."""
-        st.session_state.cooking["voice_accent"] = accent
+    def set_voice_name(self, voice_name: str):
+        """Set the voice name and save to database."""
+        st.session_state.cooking["voice_name"] = voice_name
+        self._save_voice_preferences()
+
+    def get_voice_rate(self) -> str:
+        """Get the current voice rate (e.g., '+20%')."""
+        return st.session_state.cooking.get("voice_rate", DEFAULT_VOICE_RATE)
+
+    def set_voice_rate(self, rate: str):
+        """Set the voice rate and save to database."""
+        st.session_state.cooking["voice_rate"] = rate
+        self._save_voice_preferences()
+
+    def get_speed_slider_value(self) -> int:
+        """Get current speed as slider value (-2 to +4)."""
+        return rate_to_slider_value(self.get_voice_rate())
+
+    def set_speed_from_slider(self, slider_value: int):
+        """Set voice rate from slider value."""
+        self.set_voice_rate(slider_value_to_rate(slider_value))
 
     def get_pending_audio(self) -> Optional[bytes]:
         """Get pending audio for playback and clear it."""
@@ -115,9 +193,9 @@ class CookingController:
         """Get all available recipes."""
         return self.recipes.get_all()
 
-    def get_available_accents(self) -> list[str]:
-        """Get available voice accents."""
-        return self.audio.get_available_accents()
+    def get_available_voices(self) -> dict[str, str]:
+        """Get available voices as {voice_id: display_name}."""
+        return self.audio.get_available_voices()
 
     # Discovery mode
     def _get_recipe_list_for_claude(self) -> str:
@@ -224,7 +302,9 @@ class CookingController:
             ],
             "audio_key": 0,
             "pending_audio": None,
-            "voice_accent": st.session_state.cooking.get("voice_accent", "American 🇺🇸"),
+            "voice_name": st.session_state.cooking.get("voice_name", DEFAULT_VOICE_NAME),
+            "voice_rate": st.session_state.cooking.get("voice_rate", DEFAULT_VOICE_RATE),
+            "preferences_loaded": True,  # Keep loaded state
         }
 
         return True
@@ -242,7 +322,9 @@ class CookingController:
             "messages": [],
             "audio_key": 0,
             "pending_audio": None,
-            "voice_accent": st.session_state.cooking.get("voice_accent", "American 🇺🇸"),
+            "voice_name": st.session_state.cooking.get("voice_name", DEFAULT_VOICE_NAME),
+            "voice_rate": st.session_state.cooking.get("voice_rate", DEFAULT_VOICE_RATE),
+            "preferences_loaded": True,  # Keep loaded state
         }
 
     # Message handling
@@ -280,8 +362,12 @@ class CookingController:
         state["messages"].append({"role": "user", "content": text})
         state["messages"].append({"role": "assistant", "content": response})
 
-        # Generate TTS audio
-        audio_bytes = self.audio.text_to_speech(response, state["voice_accent"])
+        # Generate TTS audio with voice preferences
+        audio_bytes = self.audio.text_to_speech(
+            response,
+            voice=state.get("voice_name", DEFAULT_VOICE_NAME),
+            rate=state.get("voice_rate", DEFAULT_VOICE_RATE)
+        )
         if audio_bytes:
             state["pending_audio"] = audio_bytes
 

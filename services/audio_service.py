@@ -2,30 +2,25 @@
 Audio Service - handles speech recognition and text-to-speech.
 
 This service is pure Python with no Streamlit dependencies.
+Uses edge-tts for high-quality neural text-to-speech.
 """
 
+import asyncio
 import tempfile
 import os
 import logging
-from io import BytesIO
 from typing import Optional
 
 import speech_recognition as sr
-from gtts import gTTS
+import edge_tts
+
+from models.user_preferences import (
+    VOICE_OPTIONS,
+    DEFAULT_VOICE_NAME,
+    DEFAULT_VOICE_RATE,
+)
 
 logger = logging.getLogger(__name__)
-
-
-# Voice accent options (gTTS tld parameter)
-VOICE_ACCENTS = {
-    "American 🇺🇸": "com",
-    "British 🇬🇧": "co.uk",
-    "Australian 🇦🇺": "com.au",
-    "Indian 🇮🇳": "co.in",
-    "Canadian 🇨🇦": "ca",
-    "Irish 🇮🇪": "ie",
-    "South African 🇿🇦": "co.za",
-}
 
 
 class AudioService:
@@ -71,29 +66,69 @@ class AudioService:
             if temp_path and os.path.exists(temp_path):
                 os.unlink(temp_path)
 
-    def text_to_speech(self, text: str, accent: str = "American 🇺🇸") -> Optional[bytes]:
+    async def _text_to_speech_async(
+        self,
+        text: str,
+        voice: str = DEFAULT_VOICE_NAME,
+        rate: str = DEFAULT_VOICE_RATE
+    ) -> Optional[bytes]:
         """
-        Convert text to speech audio.
+        Async implementation of text-to-speech using edge-tts.
 
         Args:
             text: Text to convert
-            accent: Voice accent key from VOICE_ACCENTS
+            voice: Edge-TTS voice ID (e.g., 'en-US-AriaNeural')
+            rate: Speech rate (e.g., '+20%', '-10%')
 
         Returns:
             MP3 audio bytes, or None if TTS failed
         """
         try:
-            tld = VOICE_ACCENTS.get(accent, "com")
-            tts = gTTS(text=text, lang='en', tld=tld)
-            audio_buffer = BytesIO()
-            tts.write_to_fp(audio_buffer)
-            audio_buffer.seek(0)
-            return audio_buffer.read()
+            communicate = edge_tts.Communicate(text, voice, rate=rate)
+            audio_bytes = b""
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    audio_bytes += chunk["data"]
+            return audio_bytes if audio_bytes else None
+        except Exception as e:
+            logger.error(f"Edge-TTS error: {e}")
+            return None
+
+    def text_to_speech(
+        self,
+        text: str,
+        voice: str = DEFAULT_VOICE_NAME,
+        rate: str = DEFAULT_VOICE_RATE
+    ) -> Optional[bytes]:
+        """
+        Convert text to speech audio using edge-tts.
+
+        Args:
+            text: Text to convert
+            voice: Edge-TTS voice ID (e.g., 'en-US-AriaNeural')
+            rate: Speech rate (e.g., '+20%', '-10%')
+
+        Returns:
+            MP3 audio bytes, or None if TTS failed
+        """
+        try:
+            # Run async function in sync context
+            return asyncio.run(self._text_to_speech_async(text, voice, rate))
         except Exception as e:
             logger.error(f"TTS error: {e}")
             return None
 
     @staticmethod
-    def get_available_accents() -> list[str]:
-        """Get list of available voice accents."""
-        return list(VOICE_ACCENTS.keys())
+    def get_available_voices() -> dict[str, str]:
+        """Get available voice options as {voice_id: display_name}."""
+        return VOICE_OPTIONS.copy()
+
+    @staticmethod
+    def get_voice_ids() -> list[str]:
+        """Get list of available voice IDs."""
+        return list(VOICE_OPTIONS.keys())
+
+    @staticmethod
+    def get_voice_display_names() -> list[str]:
+        """Get list of available voice display names."""
+        return list(VOICE_OPTIONS.values())

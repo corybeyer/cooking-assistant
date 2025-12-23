@@ -73,9 +73,11 @@ class PlanningView:
             audio_bytes = render_voice_panel(
                 audio_key=self.controller.get_audio_key(),
                 pending_audio=self.controller.get_pending_audio(),
-                accents=self.controller.get_available_accents(),
-                current_accent=self.controller.get_voice_accent(),
-                on_accent_change=self.controller.set_voice_accent,
+                voices=self.controller.get_available_voices(),
+                current_voice=self.controller.get_voice_name(),
+                current_speed=self.controller.get_speed_slider_value(),
+                on_voice_change=self.controller.set_voice_name,
+                on_speed_change=self.controller.set_speed_from_slider,
             )
 
             if audio_bytes:
