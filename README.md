@@ -98,31 +98,33 @@ cooking-assistant/
 
 ## Application Flow
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  pages/ & Home_Page.py (Routes - thin entry points)         │
-│                          │                                  │
-│                          ▼                                  │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  views/ (View Layer)                                │   │
-│  │  - UI components and rendering                       │   │
-│  │  - Streamlit widgets                                 │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                          │                                  │
-│                          ▼                                  │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  controllers/ (Controller Layer)                    │   │
-│  │  - Session state management                          │   │
-│  │  - Orchestrates views and services                   │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                          │                                  │
-│           ┌──────────────┼──────────────┐                  │
-│           ▼              ▼              ▼                  │
-│  ┌─────────────┐  ┌───────────┐  ┌───────────────┐        │
-│  │  models/    │  │ services/ │  │ config/       │        │
-│  │  (Data)     │  │ (Business)│  │ (Settings)    │        │
-│  └─────────────┘  └───────────┘  └───────────────┘        │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Routes["pages/ & Home_Page.py (Routes)"]
+        R[Thin entry points]
+    end
+
+    subgraph Views["views/ (View Layer)"]
+        V1[UI components and rendering]
+        V2[Streamlit widgets]
+    end
+
+    subgraph Controllers["controllers/ (Controller Layer)"]
+        C1[Session state management]
+        C2[Orchestrates views and services]
+    end
+
+    subgraph Foundation["Foundation Layer"]
+        M["models/<br/>(Data)"]
+        S["services/<br/>(Business Logic)"]
+        CF["config/<br/>(Settings)"]
+    end
+
+    Routes --> Views
+    Views --> Controllers
+    Controllers --> M
+    Controllers --> S
+    Controllers --> CF
 ```
 
 **Cooking Phases:**
@@ -133,27 +135,48 @@ cooking-assistant/
 
 ## Database Schema
 
-```
-┌─────────────────┐       ┌─────────────────────┐       ┌─────────────────┐
-│     Recipes     │       │  RecipeIngredients  │       │   Ingredients   │
-├─────────────────┤       ├─────────────────────┤       ├─────────────────┤
-│ RecipeId (PK)   │──┐    │ RecipeIngredientId  │    ┌──│ IngredientId    │
-│ Name            │  │    │ RecipeId (FK)       │────┘  │ Name            │
-│ Description     │  └───>│ IngredientId (FK)   │───────│                 │
-│ Cuisine         │       │ UnitId (FK)         │───┐   └─────────────────┘
-│ PrepTime        │       │ Quantity            │   │
-│ CookTime        │       │ OrderIndex          │   │   ┌─────────────────┐
-│ Servings        │       └─────────────────────┘   │   │ UnitsOfMeasure  │
-└─────────────────┘                                 │   ├─────────────────┤
-        │                                           └──>│ UnitId          │
-        │         ┌─────────────────┐                   │ UnitName        │
-        │         │      Steps      │                   └─────────────────┘
-        │         ├─────────────────┤
-        └────────>│ StepId          │
-                  │ RecipeId (FK)   │
-                  │ Description     │
-                  │ OrderIndex      │
-                  └─────────────────┘
+```mermaid
+erDiagram
+    Recipes {
+        int RecipeId PK
+        string Name
+        string Description
+        string Cuisine
+        int PrepTime
+        int CookTime
+        int Servings
+    }
+
+    Ingredients {
+        int IngredientId PK
+        string Name
+    }
+
+    UnitsOfMeasure {
+        int UnitId PK
+        string UnitName
+    }
+
+    RecipeIngredients {
+        int RecipeIngredientId PK
+        int RecipeId FK
+        int IngredientId FK
+        int UnitId FK
+        string Quantity
+        int OrderIndex
+    }
+
+    Steps {
+        int StepId PK
+        int RecipeId FK
+        string Description
+        int OrderIndex
+    }
+
+    Recipes ||--o{ RecipeIngredients : has
+    Recipes ||--o{ Steps : has
+    Ingredients ||--o{ RecipeIngredients : "used in"
+    UnitsOfMeasure ||--o{ RecipeIngredients : "measured by"
 ```
 
 - **Normalized** — Ingredients and units stored once, referenced by many recipes
