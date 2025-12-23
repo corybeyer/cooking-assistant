@@ -181,6 +181,18 @@ class CookingController:
 
         return True, None
 
+    def handle_discovery_voice_input(self, audio_bytes: bytes) -> tuple[bool, Optional[str]]:
+        """
+        Process voice input in discovery mode.
+
+        Returns (success, error_message)
+        """
+        text = self.audio.transcribe(audio_bytes)
+        if not text:
+            return False, "Could not understand audio. Please try again."
+
+        return self.send_discovery_message(text)
+
     # Session lifecycle
     def start_session(self, recipe_id: int) -> bool:
         """
