@@ -35,6 +35,9 @@ class CookingController:
         if "cooking" not in st.session_state:
             st.session_state.cooking = {
                 "active": False,
+                "discovery_mode": True,  # Start in discovery mode
+                "discovery_messages": [],
+                "recipe_list": None,
                 "recipe_id": None,
                 "recipe_name": None,
                 "recipe_context": None,
@@ -68,6 +71,14 @@ class CookingController:
     def is_session_active(self) -> bool:
         """Check if a cooking session is active."""
         return st.session_state.cooking["active"]
+
+    def is_discovery_mode(self) -> bool:
+        """Check if we're in recipe discovery mode."""
+        return st.session_state.cooking.get("discovery_mode", True)
+
+    def get_discovery_messages(self) -> list[dict]:
+        """Get the discovery chat message history."""
+        return st.session_state.cooking.get("discovery_messages", [])
 
     def get_recipe_name(self) -> Optional[str]:
         """Get the current recipe name."""
@@ -108,6 +119,68 @@ class CookingController:
         """Get available voice accents."""
         return self.audio.get_available_accents()
 
+    # Discovery mode
+    def _get_recipe_list_for_claude(self) -> str:
+        """Get formatted recipe list for Claude prompts."""
+        if st.session_state.cooking.get("recipe_list"):
+            return st.session_state.cooking["recipe_list"]
+
+        recipes = self.recipes.get_all()
+        lines = []
+        for r in recipes:
+            desc = f" - {r.description}" if r.description else ""
+            time_info = f" (Prep: {r.prep_time or '?'}min, Cook: {r.cook_time or '?'}min)" if r.prep_time or r.cook_time else ""
+            lines.append(f"- ID {r.id}: {r.name}{desc}{time_info}")
+
+        recipe_list = "\n".join(lines) if lines else "No recipes available."
+        st.session_state.cooking["recipe_list"] = recipe_list
+        return recipe_list
+
+    def init_discovery(self) -> bool:
+        """
+        Initialize discovery mode with a greeting from Claude.
+        Returns True if greeting was generated.
+        """
+        if st.session_state.cooking.get("discovery_messages"):
+            return True  # Already initialized
+
+        recipe_list = self._get_recipe_list_for_claude()
+        greeting = self.claude.get_discovery_greeting(recipe_list)
+
+        st.session_state.cooking["discovery_messages"] = [
+            {"role": "assistant", "content": greeting}
+        ]
+        return True
+
+    def send_discovery_message(self, text: str) -> tuple[bool, Optional[str]]:
+        """
+        Send a message in discovery mode.
+
+        Returns (success, error_message)
+        """
+        if not self._check_rate_limit():
+            return False, "Too many requests. Please wait a moment."
+
+        state = st.session_state.cooking
+        recipe_list = self._get_recipe_list_for_claude()
+
+        # Get Claude response
+        response_text, selected_recipe_id = self.claude.chat_discovery(
+            text,
+            recipe_list,
+            state["discovery_messages"]
+        )
+
+        # Update message history
+        state["discovery_messages"].append({"role": "user", "content": text})
+        state["discovery_messages"].append({"role": "assistant", "content": response_text})
+
+        # If Claude selected a recipe, start the cooking session
+        if selected_recipe_id:
+            self.start_session(selected_recipe_id)
+
+        return True, None
+
     # Session lifecycle
     def start_session(self, recipe_id: int) -> bool:
         """
@@ -127,6 +200,9 @@ class CookingController:
 
         st.session_state.cooking = {
             "active": True,
+            "discovery_mode": False,
+            "discovery_messages": [],
+            "recipe_list": None,
             "recipe_id": recipe_id,
             "recipe_name": recipe.Name,
             "recipe_context": context,
@@ -142,9 +218,12 @@ class CookingController:
         return True
 
     def end_session(self):
-        """End the current cooking session."""
+        """End the current cooking session and return to discovery mode."""
         st.session_state.cooking = {
             "active": False,
+            "discovery_mode": True,
+            "discovery_messages": [],  # Reset discovery for fresh start
+            "recipe_list": None,
             "recipe_id": None,
             "recipe_name": None,
             "recipe_context": None,

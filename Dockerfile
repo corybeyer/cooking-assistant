@@ -31,10 +31,10 @@ COPY services/ ./services/
 COPY pages/ ./pages/
 
 # Copy Streamlit app
-COPY streamlit_app.py .
+COPY Home_Page.py .
 
 # Expose port
 EXPOSE 80
 
 # Run Streamlit app
-CMD ["streamlit", "run", "streamlit_app.py", "--server.port=80", "--server.address=0.0.0.0", "--server.headless=true"]
+CMD ["streamlit", "run", "Home_Page.py", "--server.port=80", "--server.address=0.0.0.0", "--server.headless=true"]
