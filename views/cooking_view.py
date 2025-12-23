@@ -130,3 +130,34 @@ class CookingView:
                     st.rerun()
                 elif error:
                     st.warning(error)
+
+            # Text input as alternative
+            st.markdown("---")
+            st.markdown("**Or type:**")
+            user_input = st.text_input(
+                "Type your message",
+                key="cooking_text_input",
+                placeholder="Type here...",
+                label_visibility="collapsed"
+            )
+
+            if user_input:
+                with st.spinner("Thinking..."):
+                    self.controller.send_message(user_input)
+                st.rerun()
+
+            # Quick prompts (cooking-specific)
+            st.markdown("---")
+            st.markdown("**Quick prompts:**")
+
+            if st.button("What's next?", use_container_width=True, key="qp_next"):
+                self.controller.send_message("What's the next step?")
+                st.rerun()
+
+            if st.button("Can I substitute?", use_container_width=True, key="qp_substitute"):
+                self.controller.send_message("What substitutions can I make?")
+                st.rerun()
+
+            if st.button("How long left?", use_container_width=True, key="qp_time"):
+                self.controller.send_message("How much time is left?")
+                st.rerun()
