@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     azure_comm_email_endpoint: str = ""  # Format: https://<resource-name>.communication.azure.com
     azure_comm_email_sender: str = ""  # Format: DoNotReply@<domain>.azurecomm.net
 
+    # Kroger API (for price comparison)
+    kroger_client_id: str = ""
+    kroger_client_secret: str = ""
+    kroger_location_id: str = ""  # Optional: specific store location for accurate pricing
+
     # Note: Authentication handled by Azure Container Apps Easy Auth (Entra ID)
 
     @property
