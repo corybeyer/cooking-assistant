@@ -32,9 +32,16 @@ class ShoppingListRepository:
     # Shopping List CRUD
     # ==========================================
 
-    def create(self, name: Optional[str] = None) -> ShoppingList:
-        """Create a new shopping list."""
+    def create(self, user_id: str, name: Optional[str] = None) -> ShoppingList:
+        """
+        Create a new shopping list for a user.
+
+        Args:
+            user_id: The Entra ID object ID of the user
+            name: Optional name for the list
+        """
         shopping_list = ShoppingList(
+            UserId=user_id,
             Name=name,
             Status='active'
         )
@@ -63,9 +70,15 @@ class ShoppingListRepository:
             return self.get_by_id(link.ShoppingListId)
         return None
 
-    def get_all_active(self) -> list[ShoppingList]:
-        """Get all active shopping lists."""
+    def get_all_active(self, user_id: str) -> list[ShoppingList]:
+        """
+        Get all active shopping lists for a specific user.
+
+        Args:
+            user_id: The Entra ID object ID of the user
+        """
         return self.db.query(ShoppingList).filter(
+            ShoppingList.UserId == user_id,
             ShoppingList.Status == 'active'
         ).order_by(ShoppingList.CreatedDate.desc()).all()
 
@@ -271,14 +284,39 @@ class ShoppingListRepository:
 
     def create_from_recipes(
         self,
+        user_id: str,
         name: str,
         recipe_ids: list[int]
     ) -> ShoppingList:
-        """Create a shopping list and add recipes in one operation."""
-        shopping_list = self.create(name)
+        """
+        Create a shopping list and add recipes in one operation.
+
+        Args:
+            user_id: The Entra ID object ID of the user
+            name: Name for the shopping list
+            recipe_ids: List of recipe IDs to add
+        """
+        shopping_list = self.create(user_id, name)
         self.add_recipes(shopping_list.ShoppingListId, recipe_ids)
         self.db.refresh(shopping_list)
         return shopping_list
+
+    def is_owner(self, shopping_list_id: int, user_id: str) -> bool:
+        """
+        Check if a user owns a shopping list.
+
+        Args:
+            shopping_list_id: The shopping list ID
+            user_id: The Entra ID object ID to check
+
+        Returns:
+            True if the user owns the list, False otherwise
+        """
+        result = self.db.query(ShoppingList).filter(
+            ShoppingList.ShoppingListId == shopping_list_id,
+            ShoppingList.UserId == user_id
+        ).first()
+        return result is not None
 
     def get_items_by_category(
         self,

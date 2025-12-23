@@ -154,10 +154,14 @@ class ShoppingList(Base):
 
     A shopping list aggregates ingredients from multiple recipes
     and can be shared via a unique link code.
+
+    UserId stores the Entra ID object ID (GUID) of the list owner,
+    enabling multi-user data isolation.
     """
     __tablename__ = "ShoppingLists"
 
     ShoppingListId = Column(Integer, primary_key=True, autoincrement=True)
+    UserId = Column(String(255), nullable=False)  # Entra ID object ID
     Name = Column(String(200), nullable=True)
     CreatedDate = Column(DateTime, nullable=False, server_default=func.now())
     Status = Column(String(50), nullable=False, default='active')  # active, completed, archived

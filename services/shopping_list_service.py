@@ -301,6 +301,7 @@ Response:"""
 
     def create_shopping_list_from_recipes(
         self,
+        user_id: str,
         name: str,
         recipe_ids: list[int],
         use_claude: bool = False
@@ -309,9 +310,15 @@ Response:"""
         Create a complete shopping list from recipes in one operation.
 
         Creates the shopping list, links recipes, and generates aggregated items.
+
+        Args:
+            user_id: The Entra ID object ID of the user
+            name: Name for the shopping list
+            recipe_ids: List of recipe IDs to include
+            use_claude: If True, use Claude for smart quantity aggregation
         """
         # Create the list and link recipes
-        shopping_list = self.repo.create_from_recipes(name, recipe_ids)
+        shopping_list = self.repo.create_from_recipes(user_id, name, recipe_ids)
 
         # Generate aggregated items
         self.generate_shopping_list(shopping_list.ShoppingListId, use_claude=use_claude)
